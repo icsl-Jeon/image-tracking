@@ -45,7 +45,7 @@ if(NO_ROS)
 endif()
 
 
-find_package(catkin REQUIRED COMPONENTS gazebo_msgs geometry_msgs mav_msgs roscpp sensor_msgs)
+find_package(catkin REQUIRED COMPONENTS gazebo_msgs geometry_msgs octomap_ros mav_msgs roscpp sensor_msgs octomap_msgs)
 
 
 catkin_package(
@@ -55,15 +55,21 @@ catkin_package(
     mav_msgs
     roscpp
     sensor_msgs
+    octomap_ros
+    octomap_msgs
 )
 
 include_directories(include ${catkin_INCLUDE_DIRS})
 
 
-
 add_executable(waypoint_publisher_from_key src/waypoint_publisher_from_key.cpp)
 target_link_libraries(waypoint_publisher_from_key ${catkin_LIBRARIES})
 add_dependencies(waypoint_publisher_from_key ${catkin_EXPORTED_TARGETS})
+
+
+add_executable(waypoint_proposal_from_octomap src/waypoint_proposal.cpp)
+target_link_libraries(waypoint_proposal_from_octomap ${catkin_LIBRARIES})
+add_dependencies(waypoint_proposal_from_octomap ${catkin_EXPORTED_TARGETS})
 
 
 find_package(octomap REQUIRED)
