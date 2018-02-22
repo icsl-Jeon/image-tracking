@@ -48,11 +48,14 @@ class WaypointProposer{
         CastSpaceBuffer cast_space_buffer;
         //Octree 
         OcTree* octree_obj;
+        //Marker
+        visualization_msgs::Marker castedLightMarker;
+
         //ROS 
         ros::Subscriber Octbin_sub;
         ros::ServiceServer server_query;
         ros::ServiceServer server_debug;
-
+        ros::Publisher marker_pub;
         WaypointProposer(float,unsigned int,unsigned int,float);
         ~ WaypointProposer();
 
@@ -61,6 +64,8 @@ class WaypointProposer{
         //constructor
         //callback from octree
         void OctreeCallback(const octomap_msgs::Octomap&); 
+        void marker_publish();
+
         //for leaf node inspection
         //destructor
 

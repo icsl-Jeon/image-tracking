@@ -11,11 +11,23 @@ this->elev_min=elev_min;
 this->N_azim=N_azim;
 this->N_elev=N_elev;
 this->cast_space.reserve(N_azim*N_elev);
+
 ros::NodeHandle nh;
 this->Octbin_sub=nh.subscribe("octomap_binary",10,&WaypointProposer::OctreeCallback,this);
 this->server_query = nh.advertiseService("cast_query", &WaypointProposer::QueryfromTarget,this);
 this->server_debug = nh.advertiseService("octomap_leaf_debug", &WaypointProposer::OctreeDebug,this);
- 
+this->marker_pub=nh.advertise<visualization_msgs::Marker>("casted_light", 10)>;
+
+
+castedLightMarker.header.frame_id = "light_frame";
+castedLightMarker.header.stamp  = ros::Time::now();
+castedLightMarker.ns = "casted_lights";
+castedLightMarker.action = visualization_msgs::Marker::ADD;
+castedLightMarker.pose.orientation.w = 1.0;
+castedLightMarker.id = 0;
+castedLightMarker.type = visualization_msgs::Marker::LINE_LIST;
+castedLightMarker.scale.x = 0.1;
+
 }
 
 
@@ -30,6 +42,7 @@ void WaypointProposer::OctreeCallback(const octomap_msgs::Octomap& msg){
 }
 
 bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req, image_tracking::CastQuery::Response &resp){
+    castedLightMarker.points.clear();
     bool verbose(true);
 
     if(octree_obj->size())
@@ -52,8 +65,27 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
                     tracking_distance*cos(*it_elev)*sin(*it_azim),
                     tracking_distance*sin(*it_elev));
                     cast_space[count]=octree_obj->castRay(light_start,light_dir,light_end,ignoreUnknownCells,maxRange); 
+                if (cast_space[count])
+                {   
+                    geometry_msgs::Point p;
+
+                    p.x=light_start.x();
+                    p.y=light_start.y();
+                    p.z=light_start.z();
+
+                    castedLightMarker.points.push_back(p);
+
+                    p.x=light_start.x()+light_dir.x();
+                    p.y=light_start.y()+light_dir.y();
+                    p.z=light_start.z()+light_dir.z();
+
+
+                    castedLightMarker.points.push_back(p);
+                }
+
                 if (verbose) 
-                    std::cout<< cast_space[count]<<" ";               
+                    std::cout<< cast_space[count]<<" ";    
+                           
             }
             if (verbose)
                 std::cout<<"\n";
@@ -63,6 +95,10 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
 
     return true;
 
+}
+
+void WaypointProposer::marker_publish(){
+    marker_pub.publish(castedLightMarker);
 }
 
 bool WaypointProposer::OctreeDebug(image_tracking::Debug::Request &req, image_tracking::Debug::Response &res){

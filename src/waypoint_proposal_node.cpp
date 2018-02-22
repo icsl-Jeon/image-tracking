@@ -15,7 +15,7 @@ int main(int argc, char  **argv)
 	WaypointProposer waypoint_proposer(elev_min,N_azim,N_elev,tracking_d);
     ros::Rate rate(10.0);
     while (ros::ok()){
-
+    
     ros::spinOnce(); // this is where the magic happens!!
     rate.sleep();
     }
