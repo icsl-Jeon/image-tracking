@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(image_tracking)
 
-
 add_definitions(-std=c++11)
 
 #--------------------------#
@@ -45,10 +44,19 @@ if(NO_ROS)
 endif()
 
 
-find_package(catkin REQUIRED COMPONENTS gazebo_msgs geometry_msgs octomap_ros mav_msgs roscpp sensor_msgs octomap_msgs)
+find_package(catkin REQUIRED COMPONENTS gazebo_msgs geometry_msgs octomap_ros mav_msgs roscpp sensor_msgs octomap_msgs message_generation)
 
+add_service_files(
+    FILES
+	CastQuery.srv 
+	Debug.srv 
+
+  )
+
+generate_messages(DEPENDENCIES geometry_msgs )
 
 catkin_package(
+  INCLUDE_DIRS include
   CATKIN_DEPENDS  
     gazebo_msgs
     geometry_msgs
@@ -57,6 +65,8 @@ catkin_package(
     sensor_msgs
     octomap_ros
     octomap_msgs
+	message_runtime
+
 )
 
 include_directories(include ${catkin_INCLUDE_DIRS})
@@ -67,12 +77,13 @@ target_link_libraries(waypoint_publisher_from_key ${catkin_LIBRARIES})
 add_dependencies(waypoint_publisher_from_key ${catkin_EXPORTED_TARGETS})
 
 
-add_executable(waypoint_proposal_from_octomap src/waypoint_proposal.cpp)
-target_link_libraries(waypoint_proposal_from_octomap ${catkin_LIBRARIES})
-add_dependencies(waypoint_proposal_from_octomap ${catkin_EXPORTED_TARGETS})
+add_executable(waypoint_proposal_from_octomap_node src/waypoint_proposal_node.cpp src/waypoint_proposal.cpp)
+target_link_libraries(waypoint_proposal_from_octomap_node ${catkin_LIBRARIES} )
+add_dependencies(waypoint_proposal_from_octomap_node  ${catkin_EXPORTED_TARGETS})
 
 
 find_package(octomap REQUIRED)
 include_directories(${OCTOMAP_INCLUDE_DIRS})
 link_libraries(${OCTOMAP_LIBRARIES})
+
 

@@ -20,7 +20,7 @@
   <include file="$(find octomap_server)/launch/octomap_tracking_server.launch">
     <arg name="world_name" value="world" />
     <arg name="mav_name" value="$(arg mav_name)"/>
-    <arg name="resolution" value="0.5"/>
+    <arg name="resolution" value="0.1"/>
     <arg name="max_range" value="4.0"/>
   </include>
   
@@ -53,6 +53,6 @@
 
   </group>
 
-	<node name="rviz" pkg="rviz" type="rviz" />
+	<node name="rviz" pkg="rviz" type="rviz" args="args=-d $(find image_tracking)/rviz/image_tracking.rviz"/>
 
 </launch>

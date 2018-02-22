@@ -1,4 +1,5 @@
-
+#ifndef HEADER_H
+#define HEADER_H
 
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h> 
@@ -10,22 +11,27 @@
 
 #include <octomap_msgs/conversions.h>
 #include <octomap_msgs/Octomap.h>
-#include <geometry_msgs/Pose.h>
+#include <geometry_msgs/Point.h>
 #include <math.h>
 #include <iostream>
 #include <vector>
   
-#include <WaypointPropser/CastQuery.h>
+#include <image_tracking/CastQuery.h>
+#include <image_tracking/Debug.h>
 
-#define PI=3.141592;
+#include <visualization_msgs/Marker.h>
 
-typedef vector<bool> CastSpace;  //2D azi-elev space
-typedef vector<CastSpace> CastSpaceBuffer; // buffer of CastSpace
+
+#define PI 3.141592
+
+typedef std::vector<bool> CastSpace;  //2D azi-elev space
+typedef std::vector<CastSpace> CastSpaceBuffer; // buffer of CastSpace
 
 using namespace octomap;
 
 /**
  TODO : 
+ octomap assignment?
 **/
 
 class WaypointProposer{
@@ -36,27 +42,29 @@ class WaypointProposer{
         float elev_min; //min elevation of ray from target light source 
         unsigned int N_azim; //how many azimuth sample in [0, 2PI]
         unsigned int N_elev; //how many elevation sample in [elev_min, PI/2]
-        bool QueryfromTarget(const WaypointPropser::CastQuery::Request,const WaypointPropser::CastQuery::Reponse)  
+        bool QueryfromTarget( image_tracking::CastQuery::Request&, image_tracking::CastQuery::Response&);  
+        bool OctreeDebug(image_tracking::Debug::Request& , image_tracking::Debug::Response&);  
         CastSpace cast_space;
         CastSpaceBuffer cast_space_buffer;
         //Octree 
-        OcTree octree_obj;
+        OcTree* octree_obj;
         //ROS 
         ros::Subscriber Octbin_sub;
-        ros::ServiceServer service;
+        ros::ServiceServer server_query;
+        ros::ServiceServer server_debug;
+
+        WaypointProposer(float,unsigned int,unsigned int,float);
+        ~ WaypointProposer();
 
 
     private:
         //constructor
-        WaypointProposer(float,unsigned int,unsigned int);
         //callback from octree
         void OctreeCallback(const octomap_msgs::Octomap&); 
         //for leaf node inspection
-        void OctreeDebug();       
         //destructor
-        ~ WaypointProposer()
 
-}
+};
 
 //linspace 
 template<typename T>
@@ -86,4 +94,4 @@ std::vector<double> linspace(T start_in, T end_in, int num_in)
                             // are exactly the same as the input
   return linspaced;
 }
-
+#endif 
