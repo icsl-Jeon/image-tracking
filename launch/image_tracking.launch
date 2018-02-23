@@ -36,14 +36,16 @@
     </include>
     
     
-    
-        <node name="waypoint_publisher_from_key" pkg="image_tracking" type="waypoint_publisher_from_key" output="screen"/>
+    <!--keyboard interface -->
+    <node name="waypoint_publisher_from_key" pkg="image_tracking" type="waypoint_publisher_from_key" output="screen"/>
 
     <node name="keypress_interface" pkg="image_tracking" type="keypress.py" output="screen" launch-prefix="xterm -e"/>
 
+	<!--state_publisher-->
     <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
     <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
     
+	<!--controller-->
     <node name="lee_position_controller_node" pkg="rotors_control" type="lee_position_controller_node" output="screen">
       <rosparam command="load" file="$(find rotors_gazebo)/resource/lee_controller_$(arg mav_name).yaml" />
       <rosparam command="load" file="$(find rotors_gazebo)/resource/$(arg mav_name).yaml" />
@@ -53,6 +55,17 @@
 
   </group>
 
-	<node name="rviz" pkg="rviz" type="rviz" args="args=-d $(find image_tracking)/rviz/image_tracking.rviz"/>
+	<!-- waypoint proposal -->
+  <group ns="waypoint_proposal">
+	<node name="proposer" pkg="image_tracking" type="waypoint_proposal_from_octomap_node" output="screen">
+	<param name="track_d" type="double" value="2.0"/>
+	<param name="elev_min" type="double" value="$(eval 3.141592/6.0)"/>
+	<param name="N_azim" type="int" value="10"/>
+	<param name="N_elev" type="int" value="6"/>
+	</node>
+  </group>
+
+  <!--rviz-->
+  <node name="rviz" pkg="rviz" type="rviz" args="args=-d $(find image_tracking)/rviz/image_tracking.rviz"/>
 
 </launch>

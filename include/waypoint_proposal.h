@@ -56,15 +56,19 @@ class WaypointProposer{
         ros::ServiceServer server_query;
         ros::ServiceServer server_debug;
         ros::Publisher marker_pub;
+        void marker_publish();
+
+        //init/ terminal
         WaypointProposer(float,unsigned int,unsigned int,float);
         ~ WaypointProposer();
+                
+        
 
 
     private:
         //constructor
         //callback from octree
         void OctreeCallback(const octomap_msgs::Octomap&); 
-        void marker_publish();
 
         //for leaf node inspection
         //destructor

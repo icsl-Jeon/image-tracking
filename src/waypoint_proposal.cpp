@@ -4,7 +4,7 @@
 //constructor 
 WaypointProposer::WaypointProposer(float elev_min,unsigned int N_azim,unsigned int N_elev,float track_d)
 {
-ROS_INFO("constructor init");
+//ROS_INFO("constructor init");
 this->octree_obj=NULL; //fake initialization
 this->tracking_distance=track_d;
 this->elev_min=elev_min;
@@ -13,13 +13,13 @@ this->N_elev=N_elev;
 this->cast_space.reserve(N_azim*N_elev);
 
 ros::NodeHandle nh;
-this->Octbin_sub=nh.subscribe("octomap_binary",10,&WaypointProposer::OctreeCallback,this);
+this->Octbin_sub=nh.subscribe("/octomap_binary",10,&WaypointProposer::OctreeCallback,this);
 this->server_query = nh.advertiseService("cast_query", &WaypointProposer::QueryfromTarget,this);
 this->server_debug = nh.advertiseService("octomap_leaf_debug", &WaypointProposer::OctreeDebug,this);
-this->marker_pub=nh.advertise<visualization_msgs::Marker>("casted_light", 10)>;
+this->marker_pub=nh.advertise<visualization_msgs::Marker>("casted_light", 10);
 
 
-castedLightMarker.header.frame_id = "light_frame";
+castedLightMarker.header.frame_id = "world";
 castedLightMarker.header.stamp  = ros::Time::now();
 castedLightMarker.ns = "casted_lights";
 castedLightMarker.action = visualization_msgs::Marker::ADD;
@@ -27,7 +27,9 @@ castedLightMarker.pose.orientation.w = 1.0;
 castedLightMarker.id = 0;
 castedLightMarker.type = visualization_msgs::Marker::LINE_LIST;
 castedLightMarker.scale.x = 0.1;
-
+castedLightMarker.color.r = 1;
+castedLightMarker.color.a = 0.5;
+   
 }
 
 
@@ -43,7 +45,7 @@ void WaypointProposer::OctreeCallback(const octomap_msgs::Octomap& msg){
 
 bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req, image_tracking::CastQuery::Response &resp){
     castedLightMarker.points.clear();
-    bool verbose(true);
+    bool verbose(false);
 
     if(octree_obj->size())
     {
@@ -51,7 +53,7 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
     double 	maxRange = tracking_distance;
 
     std::vector<double> azimuth_iter=linspace(float(0),float(2*PI),float(N_azim));
-    std::vector<double> elevation_iter=linspace(float(elev_min),float(2*PI),float(N_elev));
+    std::vector<double> elevation_iter=linspace(float(elev_min),float(PI/2.0),float(N_elev));
     point3d light_end;
     point3d light_start(req.query_pose.x,req.query_pose.y,req.query_pose.z);
             
@@ -65,7 +67,9 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
                     tracking_distance*cos(*it_elev)*sin(*it_azim),
                     tracking_distance*sin(*it_elev));
                     cast_space[count]=octree_obj->castRay(light_start,light_dir,light_end,ignoreUnknownCells,maxRange); 
-                if (cast_space[count])
+                
+                // if the ray is not obstruded by voxel.
+                if (!cast_space[count])
                 {   
                     geometry_msgs::Point p;
 
@@ -103,7 +107,8 @@ void WaypointProposer::marker_publish(){
 
 bool WaypointProposer::OctreeDebug(image_tracking::Debug::Request &req, image_tracking::Debug::Response &res){
     
-    ROS_INFO("here is service\n");
+    ROS_INFO("octree size: %f\n",this->octree_obj->size());
+    
     for(OcTree::leaf_iterator it = this->octree_obj->begin_leafs(),end_it=this->octree_obj->end_leafs(); it!=end_it; ++it)
     {
        ROS_INFO_STREAM("Node center"<<it.getCoordinate()<<" Depth: "<<it.getDepth()<<" Size: "<<it.getSize()
