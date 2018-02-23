@@ -12,7 +12,7 @@
     <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(find rotors_gazebo)/worlds/$(arg world_name).world" />
     <arg name="paused" value="true"/>
-    <arg name="gui" value="false"/> 
+    <arg name="gui" value="true"/> 
   </include>
     
     <!--octomap_server -->
@@ -20,8 +20,10 @@
   <include file="$(find octomap_server)/launch/octomap_tracking_server.launch">
     <arg name="world_name" value="world" />
     <arg name="mav_name" value="$(arg mav_name)"/>
-    <arg name="resolution" value="0.1"/>
+    <arg name="resolution" value="0.2"/>
     <arg name="max_range" value="4.0"/>
+    <arg name="height_map" value="false"/>	
+    <arg name="sensor_model" value="0.9/0.2"/>
   </include>
   
   
@@ -60,8 +62,8 @@
 	<node name="proposer" pkg="image_tracking" type="waypoint_proposal_from_octomap_node" output="screen">
 	<param name="track_d" type="double" value="2.0"/>
 	<param name="elev_min" type="double" value="$(eval 3.141592/6.0)"/>
-	<param name="N_azim" type="int" value="10"/>
-	<param name="N_elev" type="int" value="6"/>
+	<param name="N_azim" type="int" value="20"/>
+	<param name="N_elev" type="int" value="12"/>
 	</node>
   </group>
 

@@ -13,7 +13,7 @@ this->N_elev=N_elev;
 this->cast_space.reserve(N_azim*N_elev);
 
 ros::NodeHandle nh;
-this->Octbin_sub=nh.subscribe("/octomap_binary",10,&WaypointProposer::OctreeCallback,this);
+this->Octbin_sub=nh.subscribe("/octomap_full",10,&WaypointProposer::OctreeCallback,this);
 this->server_query = nh.advertiseService("cast_query", &WaypointProposer::QueryfromTarget,this);
 this->server_debug = nh.advertiseService("octomap_leaf_debug", &WaypointProposer::OctreeDebug,this);
 this->marker_pub=nh.advertise<visualization_msgs::Marker>("casted_light", 10);
@@ -26,7 +26,7 @@ castedLightMarker.action = visualization_msgs::Marker::ADD;
 castedLightMarker.pose.orientation.w = 1.0;
 castedLightMarker.id = 0;
 castedLightMarker.type = visualization_msgs::Marker::LINE_LIST;
-castedLightMarker.scale.x = 0.1;
+castedLightMarker.scale.x = 0.05;
 castedLightMarker.color.r = 1;
 castedLightMarker.color.a = 0.5;
    
@@ -38,8 +38,8 @@ WaypointProposer::~WaypointProposer(void) {
 }
 
 void WaypointProposer::OctreeCallback(const octomap_msgs::Octomap& msg){
-    AbstractOcTree* octree=octomap_msgs::binaryMsgToMap(msg);
-    //octree update
+    AbstractOcTree* octree=octomap_msgs::fullMsgToMap(msg);
+    //octree updater
     this->octree_obj=(dynamic_cast<OcTree*>(octree));
 }
 
@@ -49,7 +49,7 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
 
     if(octree_obj->size())
     {
-    bool ignoreUnknownCells = false;
+    bool ignoreUnknownCells = true;
     double 	maxRange = tracking_distance;
 
     std::vector<double> azimuth_iter=linspace(float(0),float(2*PI),float(N_azim));
@@ -66,7 +66,7 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
                   point3d light_dir(tracking_distance*cos(*it_elev)*cos(*it_azim),
                     tracking_distance*cos(*it_elev)*sin(*it_azim),
                     tracking_distance*sin(*it_elev));
-                    cast_space[count]=octree_obj->castRay(light_start,light_dir,light_end,ignoreUnknownCells,maxRange); 
+                    cast_space[count]=octree_obj->castRay(light_start,light_dir,light_end,ignoreUnknownCells); 
                 
                 // if the ray is not obstruded by voxel.
                 if (!cast_space[count])
