@@ -1,5 +1,5 @@
 #include <waypoint_proposal.h>
-
+#include <dbscan.h>
 
 //constructor 
 WaypointProposer::WaypointProposer(float elev_min,unsigned int N_azim,unsigned int N_elev,float track_d)
@@ -13,7 +13,7 @@ this->N_elev=N_elev;
 this->cast_space.reserve(N_azim*N_elev);
 
 ros::NodeHandle nh;
-this->Octbin_sub=nh.subscribe("/octomap_full",10,&WaypointProposer::OctreeCallback,this);
+this->Octbin_sub=nh.subscribe("/octomap_binary",10,&WaypointProposer::OctreeCallback,this);
 this->server_query = nh.advertiseService("cast_query", &WaypointProposer::QueryfromTarget,this);
 this->server_debug = nh.advertiseService("octomap_leaf_debug", &WaypointProposer::OctreeDebug,this);
 this->marker_pub=nh.advertise<visualization_msgs::Marker>("casted_light", 10);
@@ -38,17 +38,30 @@ WaypointProposer::~WaypointProposer(void) {
 }
 
 void WaypointProposer::OctreeCallback(const octomap_msgs::Octomap& msg){
-    AbstractOcTree* octree=octomap_msgs::fullMsgToMap(msg);
+    AbstractOcTree* octree=octomap_msgs::binaryMsgToMap(msg);
     //octree updater
     this->octree_obj=(dynamic_cast<OcTree*>(octree));
 }
 
+
+
 bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req, image_tracking::CastQuery::Response &resp){
+    
+
     castedLightMarker.points.clear();
-    bool verbose(false);
+    bool verbose(true);
 
     if(octree_obj->size())
+
     {
+
+
+    //for now, we don't know exact number of none-obstruded rays
+
+    dbscan::point_t* visible_pnts=(dbscan::point_t *)calloc(N_azim*N_elev, sizeof(dbscan::point_t));
+    std::vector<int> NoneObstruded_count;
+
+
     bool ignoreUnknownCells = true;
     double 	maxRange = tracking_distance;
 
@@ -58,9 +71,13 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
     point3d light_start(req.query_pose.x,req.query_pose.y,req.query_pose.z);
             
                 
-        int count=0;
+        int count=0,NumNoneObstruded=0;
+
+        int ind_elev=0,ind_azim=0;
+
         for (std::vector<double>::iterator it_elev = elevation_iter.begin() ; it_elev != elevation_iter.end(); ++it_elev)
         {
+            ind_azim=0;
             for (std::vector<double>::iterator it_azim = azimuth_iter.begin() ; it_azim != azimuth_iter.end(); ++it_azim)    
             {
                   point3d light_dir(tracking_distance*cos(*it_elev)*cos(*it_azim),
@@ -71,6 +88,10 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
                 // if the ray is not obstruded by voxel.
                 if (!cast_space[count])
                 {   
+                    // keep this count
+                    NoneObstruded_count.push_back(count);
+
+                    // vizualization marker 
                     geometry_msgs::Point p;
 
                     p.x=light_start.x();
@@ -85,18 +106,82 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
 
 
                     castedLightMarker.points.push_back(p);
+
+
+                    //for clustering, visible region
+
+                    visible_pnts[NumNoneObstruded].x=ind_azim;
+                    visible_pnts[NumNoneObstruded].y=ind_elev;
+                    visible_pnts[NumNoneObstruded].z=0;
+                    visible_pnts[NumNoneObstruded].cluster_id=UNCLASSIFIED;
+
+                    ++NumNoneObstruded;
+
+                }
+                ind_azim++;
+                count++;
+
+            }
+
+            ind_elev++;
+        }
+
+
+        if (verbose) //print
+        {
+
+                int count=0;
+                for (std::vector<double>::iterator it_elev = elevation_iter.begin() ; it_elev != elevation_iter.end(); ++it_elev)
+                {
+                    for (std::vector<double>::iterator it_azim = azimuth_iter.begin() ; it_azim != azimuth_iter.end(); ++it_azim)
+                    {
+
+
+                            std::cout<< cast_space[count]<<" ";
+                            count++;
+
+                    }
+
+                        std::cout<<"\n";
                 }
 
-                if (verbose) 
-                    std::cout<< cast_space[count]<<" ";    
-                           
-            }
-            if (verbose)
-                std::cout<<"\n";
         }
+
+
+        printf("---------------------------------------\n");
+
+
+        //allocation is ended. let's cluster.
+        double epsilon=1.1;
+        unsigned int minpts=4; // need to be tuned
+        dbscan::dbscan(visible_pnts,NumNoneObstruded,epsilon,minpts,dbscan::euclidean_dist);
+        //dbscan::print_points(visible_pnts, NumNoneObstruded);
+
+
+        // print out if clustering is completed
+        count=0; int search_count=0;
+        for (int ind_elev=0;ind_elev!=N_elev;ind_elev++)
+        {
+            for (int ind_azim=0;ind_azim!=N_azim;ind_azim++)
+            {
+
+                if(count==NoneObstruded_count[search_count]) // visible castspace
+                {
+                    std::cout<< visible_pnts[search_count].cluster_id<<" " ;// visible castspace. what cluster?
+                    search_count++;
+                }
+                else
+                    std::cout<< "#"<<" " ;// non-visible castspace
+
+                count++;
+
+
+            }
+            std::cout<<"\n";
+        }
+
     }
     else ROS_INFO_STREAM("octree is empty\n");
-
     return true;
 
 }

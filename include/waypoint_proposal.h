@@ -22,6 +22,7 @@
 #include <visualization_msgs/Marker.h>
 
 
+
 #define PI 3.141592
 
 typedef std::vector<bool> CastSpace;  //2D azi-elev space

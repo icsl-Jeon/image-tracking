@@ -12,7 +12,7 @@
     <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(find rotors_gazebo)/worlds/$(arg world_name).world" />
     <arg name="paused" value="true"/>
-    <arg name="gui" value="true"/> 
+    <arg name="gui" value="false"/> 
   </include>
     
     <!--octomap_server -->
@@ -22,8 +22,11 @@
     <arg name="mav_name" value="$(arg mav_name)"/>
     <arg name="resolution" value="0.2"/>
     <arg name="max_range" value="4.0"/>
-    <arg name="height_map" value="false"/>	
-    <arg name="sensor_model" value="0.9/0.2"/>
+    <arg name="height_map" value="true"/>	
+    <arg name="sensor_miss" value="0.2"/>
+    <arg name="sensor_hit" value="0.9"/>
+    <arg name="clamping_min" value="0.12"/>
+    <arg name="clamping_max" value="0.8"/>
   </include>
   
   
