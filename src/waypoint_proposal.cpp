@@ -1,5 +1,7 @@
 #include <waypoint_proposal.h>
-#include <dbscan.h>
+
+
+
 
 //constructor 
 WaypointProposer::WaypointProposer(float elev_min,unsigned int N_azim,unsigned int N_elev,float track_d)
@@ -33,6 +35,8 @@ castedLightMarker.color.a = 0.5;
 }
 
 
+
+// destructor
 WaypointProposer::~WaypointProposer(void) {
     delete octree_obj;
 }
@@ -43,8 +47,67 @@ void WaypointProposer::OctreeCallback(const octomap_msgs::Octomap& msg){
     this->octree_obj=(dynamic_cast<OcTree*>(octree));
 }
 
+// print out casted space
+
+inline void WaypointProposer::printCastspace(){
+
+    int count=0;
+    for (int it_elev =0 ; it_elev <N_elev; ++it_elev)
+    {
+        for (int it_azim = 0; it_azim < N_azim; ++it_azim)
+        {
+                std::cout<< cast_space[count]<<" ";
+                count++;
+
+        }
+            std::cout<<"\n";
+    }
+
+}
 
 
+
+
+inline void WaypointProposer::printClusteredCastspace(std::vector<int>  NoneObstruded_count,DBSCAN::DBCAN dbscan){
+
+    int count=0; int search_count=0;
+    for (int ind_elev=0;ind_elev!=N_elev;ind_elev++)
+    {
+        for (int ind_azim=0;ind_azim!=N_azim;ind_azim++)
+        {
+
+            if(count==NoneObstruded_count[search_count]) // visible castspace
+            {
+
+
+                //print this point. if it is close to center, then check star
+                int this_cluster=dbscan.points[search_count].cluster;
+
+                if(this_cluster!=DBSCAN::NOISE)
+                    std::cout<<this_cluster<<" ";
+                else
+                    std::cout<< "#"<<" " ;// treat NOISE as non-visible
+
+
+                search_count++;
+
+            }
+            else
+                std::cout<< "#"<<" " ;// non-visible castspace
+
+            count++;
+
+
+        }
+        std::cout<<"\n";
+    }
+
+}
+
+
+
+
+// query
 bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req, image_tracking::CastQuery::Response &resp){
     
 
@@ -59,10 +122,7 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
     //for now, we don't know exact number of none-obstruded rays
 
 
-    std::vector<DBSCAN::Point> visible_casted_points;
     std::vector<int> NoneObstruded_count;
-
-
     bool ignoreUnknownCells = true;
     double 	maxRange = tracking_distance;
 
@@ -112,7 +172,7 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
                     //for clustering, visible region
 
                     DBSCAN::Point pnt({ind_azim,ind_elev,0,DBSCAN::NOT_CLASSIFIED});
-                    visible_casted_points.push_back(pnt);
+                    clustered_cast_space.push_back(pnt);
 
 
                     ++NumNoneObstruded;
@@ -127,22 +187,8 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
         }
 
 
-        if (verbose) //print
-        {
-
-                int count=0;
-                for (std::vector<double>::iterator it_elev = elevation_iter.begin() ; it_elev != elevation_iter.end(); ++it_elev)
-                {
-                    for (std::vector<double>::iterator it_azim = azimuth_iter.begin() ; it_azim != azimuth_iter.end(); ++it_azim)
-                    {
-                            std::cout<< cast_space[count]<<" ";
-                            count++;
-
-                    }
-                        std::cout<<"\n";
-                }
-        }
-
+        if (verbose) //print cast space
+            printCastspace();
 
         printf("---------------------------------------\n");
 
@@ -151,66 +197,20 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
         double epsilon=1.1;
         unsigned int minpts=2; // need to be tuned
 
-        if(visible_casted_points.size()) // if there is any visible ray
+        if(clustered_cast_space.size()) // if there is any visible ray
         {
 
-        DBSCAN::DBCAN dbscan(5,epsilon,minpts,visible_casted_points);
-        dbscan.run();
-        //dbscan::print_points(visible_pnts, NumNoneObstruded);
-        std::cout<<dbscan.cluster.size()<<std::endl;
+            DBSCAN::DBCAN dbscan(5,epsilon,minpts,clustered_cast_space);
+            dbscan.run();
+
+            //let's obtain the center of each clustered
+            std::vector<std::vector<double>> cluster_centers=dbscan.getClusterCenter();
 
 
-        std::vector<std::vector<double>> cluster_centers=dbscan.getClusterCenter();
+            // print out if clustering is completed
+            if(verbose)
+             printClusteredCastspace(NoneObstruded_count,dbscan);
 
-        /** check centers of each cluster
-        for(int i=0;i<cluster_centers.size();i++)
-        {
-            printf("center : [%f , %f] \n",cluster_centers[i][0],cluster_centers[i][1]);
-        }
-        **/
-
-
-        // print out if clustering is completed
-        if(verbose)
-        {    count=0; int search_count=0;
-            for (int ind_elev=0;ind_elev!=N_elev;ind_elev++)
-            {
-                for (int ind_azim=0;ind_azim!=N_azim;ind_azim++)
-                {
-
-                    if(count==NoneObstruded_count[search_count]) // visible castspace
-                    {
-
-
-                        //print this point. if it is close to center, then check star
-                        int this_cluster=dbscan.points[search_count].cluster;
-
-                        if(this_cluster!=DBSCAN::NOISE)
-                        {
-                            //printf("cur_cluster_id: %d\n",this_cluster);
-                            if (ind_elev==cluster_centers[this_cluster][1] &&
-                                    ind_azim==cluster_centers[this_cluster][0] )
-                                std::cout<<"*"<<" " ;// visible castspace. what cluster?
-                            else
-                                std::cout<<this_cluster<<" ";
-                        }
-                        else
-                        std::cout<< "#"<<" " ;// treat NOISE as non-visible
-
-
-                        search_count++;
-
-                    }
-                    else
-                        std::cout<< "#"<<" " ;// non-visible castspace
-
-                    count++;
-
-
-                }
-                std::cout<<"\n";
-            }
-        }
         }
         else
             ROS_WARN("All rays were obstruded");

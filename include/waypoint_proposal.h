@@ -21,18 +21,20 @@
 
 #include <visualization_msgs/Marker.h>
 
-
+#include <dbscan.h>
 
 #define PI 3.141592
 
-typedef std::vector<bool> CastSpace;  //2D azi-elev space
+typedef std::vector<bool> CastSpace;  //1D azi-elev space (flattened)
+typedef std::vector<DBSCAN::Point> ClusteredCastSpace; //2D azi-elev space. x,y member is index
 typedef std::vector<CastSpace> CastSpaceBuffer; // buffer of CastSpace
 
 using namespace octomap;
 
 /**
  TODO : 
- octomap assignment?
+
+
 **/
 
 class WaypointProposer{
@@ -46,6 +48,7 @@ class WaypointProposer{
         bool QueryfromTarget( image_tracking::CastQuery::Request&, image_tracking::CastQuery::Response&);  
         bool OctreeDebug(image_tracking::Debug::Request& , image_tracking::Debug::Response&);  
         CastSpace cast_space;
+        ClusteredCastSpace clustered_cast_space;
         CastSpaceBuffer cast_space_buffer;
         //Octree 
         OcTree* octree_obj;
@@ -70,7 +73,8 @@ class WaypointProposer{
         //constructor
         //callback from octree
         void OctreeCallback(const octomap_msgs::Octomap&); 
-
+        inline void printCastspace();
+        inline void printClusteredCastspace(std::vector<int>,DBSCAN::DBCAN);
         //for leaf node inspection
         //destructor
 
