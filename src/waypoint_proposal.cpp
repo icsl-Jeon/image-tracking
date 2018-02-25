@@ -58,7 +58,8 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
 
     //for now, we don't know exact number of none-obstruded rays
 
-    dbscan::point_t* visible_pnts=(dbscan::point_t *)calloc(N_azim*N_elev, sizeof(dbscan::point_t));
+
+    std::vector<DBSCAN::Point> visible_casted_points;
     std::vector<int> NoneObstruded_count;
 
 
@@ -110,10 +111,9 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
 
                     //for clustering, visible region
 
-                    visible_pnts[NumNoneObstruded].x=ind_azim;
-                    visible_pnts[NumNoneObstruded].y=ind_elev;
-                    visible_pnts[NumNoneObstruded].z=0;
-                    visible_pnts[NumNoneObstruded].cluster_id=UNCLASSIFIED;
+                    DBSCAN::Point pnt({ind_azim,ind_elev,0,DBSCAN::NOT_CLASSIFIED});
+                    visible_casted_points.push_back(pnt);
+
 
                     ++NumNoneObstruded;
 
@@ -135,16 +135,12 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
                 {
                     for (std::vector<double>::iterator it_azim = azimuth_iter.begin() ; it_azim != azimuth_iter.end(); ++it_azim)
                     {
-
-
                             std::cout<< cast_space[count]<<" ";
                             count++;
 
                     }
-
                         std::cout<<"\n";
                 }
-
         }
 
 
@@ -153,32 +149,71 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
 
         //allocation is ended. let's cluster.
         double epsilon=1.1;
-        unsigned int minpts=4; // need to be tuned
-        dbscan::dbscan(visible_pnts,NumNoneObstruded,epsilon,minpts,dbscan::euclidean_dist);
+        unsigned int minpts=2; // need to be tuned
+
+        if(visible_casted_points.size()) // if there is any visible ray
+        {
+
+        DBSCAN::DBCAN dbscan(5,epsilon,minpts,visible_casted_points);
+        dbscan.run();
         //dbscan::print_points(visible_pnts, NumNoneObstruded);
+        std::cout<<dbscan.cluster.size()<<std::endl;
+
+
+        std::vector<std::vector<double>> cluster_centers=dbscan.getClusterCenter();
+
+        /** check centers of each cluster
+        for(int i=0;i<cluster_centers.size();i++)
+        {
+            printf("center : [%f , %f] \n",cluster_centers[i][0],cluster_centers[i][1]);
+        }
+        **/
 
 
         // print out if clustering is completed
-        count=0; int search_count=0;
-        for (int ind_elev=0;ind_elev!=N_elev;ind_elev++)
-        {
-            for (int ind_azim=0;ind_azim!=N_azim;ind_azim++)
+        if(verbose)
+        {    count=0; int search_count=0;
+            for (int ind_elev=0;ind_elev!=N_elev;ind_elev++)
             {
-
-                if(count==NoneObstruded_count[search_count]) // visible castspace
+                for (int ind_azim=0;ind_azim!=N_azim;ind_azim++)
                 {
-                    std::cout<< visible_pnts[search_count].cluster_id<<" " ;// visible castspace. what cluster?
-                    search_count++;
+
+                    if(count==NoneObstruded_count[search_count]) // visible castspace
+                    {
+
+
+                        //print this point. if it is close to center, then check star
+                        int this_cluster=dbscan.points[search_count].cluster;
+
+                        if(this_cluster!=DBSCAN::NOISE)
+                        {
+                            //printf("cur_cluster_id: %d\n",this_cluster);
+                            if (ind_elev==cluster_centers[this_cluster][1] &&
+                                    ind_azim==cluster_centers[this_cluster][0] )
+                                std::cout<<"*"<<" " ;// visible castspace. what cluster?
+                            else
+                                std::cout<<this_cluster<<" ";
+                        }
+                        else
+                        std::cout<< "#"<<" " ;// treat NOISE as non-visible
+
+
+                        search_count++;
+
+                    }
+                    else
+                        std::cout<< "#"<<" " ;// non-visible castspace
+
+                    count++;
+
+
                 }
-                else
-                    std::cout<< "#"<<" " ;// non-visible castspace
-
-                count++;
-
-
+                std::cout<<"\n";
             }
-            std::cout<<"\n";
         }
+        }
+        else
+            ROS_WARN("All rays were obstruded");
 
     }
     else ROS_INFO_STREAM("octree is empty\n");
@@ -186,8 +221,11 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
 
 }
 
+
 void WaypointProposer::marker_publish(){
-    marker_pub.publish(castedLightMarker);
+    if (castedLightMarker.points.size())
+        marker_pub.publish(castedLightMarker);
+
 }
 
 bool WaypointProposer::OctreeDebug(image_tracking::Debug::Request &req, image_tracking::Debug::Response &res){
