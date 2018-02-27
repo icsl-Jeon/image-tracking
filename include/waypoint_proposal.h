@@ -23,6 +23,7 @@
 #include <geometry_msgs/Point.h>
 
 #include <dbscan.h>
+#include <boxoperator.h>
 
 
 #define PI 3.141592
@@ -31,27 +32,18 @@
 typedef std::vector<bool> CastSpace;  //1D azi-elev space (flattened)
 typedef std::vector<DBSCAN::Point> ClusteredCastSpace; //2D azi-elev space. x,y member is index
 typedef std::vector<CastSpace> CastSpaceBuffer; // buffer of CastSpace
-typedef std::vector< std::vector<bool> > boolMatrix; // bool matrix 
-typedef std::vector< std::vector<int> > intMatrix;
 
 
 using namespace octomap;
 
 
-struct Box{
 
-    double upper_right_x;
-    double upper_right_y;
-    double lower_left_x;
-    double lower_left_y;
-
-};
-
-
+//this class has info about casted result with clusterd BBs(bounding box)
 class CastResult{
 public:
-    boolMatrix mat;
+    intMatrix mat;
     std::vector<Box> clusterBB; //cluster bounding box
+    std::vector<int> clusterNvec; //cluster numbers
     int Ncluster; //total number of cluster
 
     // constructor
@@ -63,12 +55,13 @@ public:
 };
 
 
-
+// this class has PBs(proposed box)
 class ProposedView{
 
     public:
         std::vector<Box> ProposedBoxes; //proposed castspace regions(in real domain. not index)
         double secs; //time stamp
+        void printProposedView(const CastResult & );
 };
 
 
@@ -105,19 +98,20 @@ class WaypointProposer{
         // Ray casting
         CastResult castRayandClustering(geometry_msgs::Point,bool=false);
         // Observation proposal
-        //std::vector<Box> regionProposal(CastResult,bool=false);
+        ProposedView regionProposal(CastResult,bool=false);
 
 
     private:
         //constructor
         //callback from octree
         void OctreeCallback(const octomap_msgs::Octomap&); 
-        inline void printCastspace();
-        inline void printClusteredCastspace(std::vector<int>,DBSCAN::DBCAN);
         //for leaf node inspection
         //destructor
 
 };
+
+
+
 
 //linspace 
 template<typename T>
@@ -148,4 +142,8 @@ std::vector<double> linspace(T start_in, T end_in, int num_in)
                             // are exactly the same as the input
   return linspaced;
 }
+
+
+
+
 #endif 

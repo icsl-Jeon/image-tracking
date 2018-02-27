@@ -69,7 +69,7 @@ catkin_package(
 
 )
 
-include_directories(include ${catkin_INCLUDE_DIRS})
+include_directories(include ${catkin_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 
 add_executable(waypoint_publisher_from_key src/waypoint_publisher_from_key.cpp)

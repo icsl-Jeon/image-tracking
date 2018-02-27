@@ -1,9 +1,6 @@
 #include <waypoint_proposal.h>
 
 
-
-
-
 /**
   CastResult class
 **/
@@ -14,7 +11,7 @@ CastResult::CastResult(int row,int col)
     //initialization with 0
     for(int i=0;i<row;i++)
     {
-        std::vector<bool> row_array;
+        std::vector<int> row_array;
         for(int j=0;j<col;j++)
             row_array.push_back(0);
         mat.push_back(row_array);
@@ -29,25 +26,70 @@ void CastResult::printResult(){
     **/
     intMatrix intmat;
     int row=mat.size();
-    std::cout<<"num of row: "<<row<<std::endl;
 
     int col=mat[0].size();
 
-    std::cout<<"num of col: "<<col<<std::endl;
 
     // first, assign
     for (int i=0; i<row;i++)
     {
         std::vector<int> row_vector;
         for (int j=0; j<col;j++)
-            row_vector.push_back((int)mat[i][j]);
+            row_vector.push_back(mat[i][j]);
         intmat.push_back(row_vector);
     }
 
 
 
     // for each cluster, save bounding box
-    for(std::vector<Box>::iterator it=clusterBB.begin();it!=clusterBB.end();it++)
+//    for(std::vector<Box>::iterator it=clusterBB.begin();it!=clusterBB.end();it++)
+//    {
+
+//        // horizontal two lines
+//        for(int col= it->lower_left_y;col <=it->upper_right_y;col++)
+//        {
+//            intmat[it->upper_right_x][col]=BB;
+//            intmat[it->lower_left_x][col]=BB;
+//        }
+//        //vertical two lines
+//        for(int row= it->upper_right_x;row <=it->lower_left_x;row++)
+//        {
+//            intmat[row][it->lower_left_y]=BB;
+//            intmat[row][it->upper_right_y]=BB;
+//        }
+//    }
+
+    for (int ind_elev=0;ind_elev!=row;ind_elev++)
+    {
+        for (int ind_azim=0;ind_azim!=col;ind_azim++)
+
+            if (intmat[ind_elev][ind_azim]==2) //if its is BB
+                std::cout<<"* ";
+            else
+                std::cout<<intmat[ind_elev][ind_azim]<<" ";
+
+        std::cout<<"\n";
+
+    }
+
+}
+
+
+/**
+    ProposedView
+**/
+
+
+void ProposedView::printProposedView(const CastResult & castresult){
+
+    intMatrix intmat=castresult.mat;
+
+    int row=intmat.size();
+
+    int col=intmat[0].size();
+
+    // for each cluster, save bounding box
+    for(std::vector<Box>::iterator it=ProposedBoxes.begin();it!=ProposedBoxes.end();it++)
     {
 
         // horizontal two lines
@@ -78,7 +120,6 @@ void CastResult::printResult(){
     }
 
 }
-
 
 
 /**
@@ -176,7 +217,7 @@ CastResult WaypointProposer::castRayandClustering(geometry_msgs::Point query_poi
 
         }
         
-            
+
         // clustering         
         const double epsilon=1.1;
         const int max_group_number=3;
@@ -207,6 +248,7 @@ CastResult WaypointProposer::castRayandClustering(geometry_msgs::Point query_poi
                 for(;it!=dbscan.cluster[cluster_idx].end();it++)
                 {
 
+
                     clusterBB.lower_left_x=std::max(visible_space[*it].x,clusterBB.lower_left_x);  //row
                     clusterBB.lower_left_y=std::min(visible_space[*it].y,clusterBB.lower_left_y);  //col
 
@@ -216,7 +258,7 @@ CastResult WaypointProposer::castRayandClustering(geometry_msgs::Point query_poi
                  }
 
                 castresult.clusterBB.push_back(clusterBB);
-
+                castresult.clusterNvec.push_back(dbscan.cluster[cluster_idx].size());
                 
             }
         //rayCast result print
@@ -237,7 +279,47 @@ CastResult WaypointProposer::castRayandClustering(geometry_msgs::Point query_poi
 
 
 // for clustered castspace we propose corresponding region proposal
-//ProposedView regionProposal(CastResult castResult,bool verbose=false)
+ProposedView WaypointProposer::regionProposal(CastResult castResult,bool verbose)
+{
+    ProposedView proposedView;
+    // here box denote real coordinate
+    int minPnts=6; //minimum number of cluster
+    int count=0;
+    //iterate through clusters
+    for(std::vector<Box>::iterator it=castResult.clusterBB.begin();
+         it!=castResult.clusterBB.end();it++,count++)
+        if(castResult.clusterNvec[count]>=minPnts)
+        {
+            int col=it->upper_right_y-it->lower_left_y+1;
+            int row=-(it->upper_right_x-it->lower_left_x)+1;
+            
+            int transl_x=-it->upper_right_x;
+            int transl_y=-it->lower_left_y;
+            
+            intMatrix matrix;
+            for (int i=0;i<row;i++)
+            {
+                std::vector<int> row_vector;
+                for (int j=0;j<col;j++)
+                    row_vector.push_back(1-castResult.mat[i-transl_x][j-transl_y]);
+                matrix.push_back(row_vector);
+            }
+            //TODO : if we have two or more in one cluster?
+            Box bb_cur_cluster=maxRectangle(matrix);
+
+            bb_cur_cluster.lower_left_x-=transl_x;
+            bb_cur_cluster.upper_right_x-=transl_x;
+            bb_cur_cluster.lower_left_y-=transl_y;
+            bb_cur_cluster.upper_right_y-=transl_y;
+
+            proposedView.ProposedBoxes.push_back(bb_cur_cluster);
+            
+        }
+    if (verbose)
+        proposedView.printProposedView(castResult);
+
+    return proposedView;
+}
 
 
 
@@ -259,7 +341,8 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
         point.x=(req.query_pose.x); point.y=(req.query_pose.y); point.z=(req.query_pose.z);
 
         CastResult castresult=castRayandClustering(point,true);
-
+        std::cout<<"---------------------------"<<std::endl;
+        ProposedView proposedview=regionProposal(castresult,true);
 
         // castRay Rviz
 
@@ -329,6 +412,9 @@ bool WaypointProposer::OctreeDebug(image_tracking::Debug::Request &req, image_tr
     }
     return true;
 }
+
+
+
 
 
 

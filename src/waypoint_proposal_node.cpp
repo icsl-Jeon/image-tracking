@@ -1,4 +1,5 @@
 #include <waypoint_proposal.h>
+
 /** usage
  * arg : tracking_d elev_min N_azim N_elev
 **/
@@ -15,8 +16,8 @@ int main(int argc, char  **argv)
 
 
 
-	ros::init(argc, argv, "waypoint_proposal_node");
-    
+    ros::init(argc, argv, "waypoint_proposal_node");
+
     ros::NodeHandle nh_private("~");
     nh_private.param("track_d", track_d, 2.0);
     nh_private.param("elev_min", elev_min, PI/6.0);
@@ -24,11 +25,11 @@ int main(int argc, char  **argv)
     nh_private.param("N_elev",N_elev, 6);
 
 
-	WaypointProposer waypoint_proposer(elev_min,N_azim,N_elev,track_d);
+    WaypointProposer waypoint_proposer(elev_min,N_azim,N_elev,track_d);
     ros::Rate rate(10.0);
     while (ros::ok()){
     waypoint_proposer.marker_publish();
-    ros::spinOnce(); // this is where the magic happens!!
+    ros::spinOnce();
     rate.sleep();
     }
     return 0;

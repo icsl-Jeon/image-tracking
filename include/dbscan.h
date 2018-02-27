@@ -1,3 +1,6 @@
+#ifndef DBSCAN_H
+#define DBSCAN_H
+
 #include <iostream>
 #include <vector>
 #include <string>
@@ -147,3 +150,5 @@ int main(int argc, const char * argv[]) {
 }
 **/
 }
+
+#endif
