@@ -3,6 +3,89 @@
 
 
 
+
+/**
+  CastResult class
+**/
+
+//constructor
+CastResult::CastResult(int row,int col)
+{
+    //initialization with 0
+    for(int i=0;i<row;i++)
+    {
+        std::vector<bool> row_array;
+        for(int j=0;j<col;j++)
+            row_array.push_back(0);
+        mat.push_back(row_array);
+    }
+
+}
+
+void CastResult::printResult(){
+
+    /**
+        print out the cast space with clusterBB
+    **/
+    intMatrix intmat;
+    int row=mat.size();
+    std::cout<<"num of row: "<<row<<std::endl;
+
+    int col=mat[0].size();
+
+    std::cout<<"num of col: "<<col<<std::endl;
+
+    // first, assign
+    for (int i=0; i<row;i++)
+    {
+        std::vector<int> row_vector;
+        for (int j=0; j<col;j++)
+            row_vector.push_back((int)mat[i][j]);
+        intmat.push_back(row_vector);
+    }
+
+
+
+    // for each cluster, save bounding box
+    for(std::vector<Box>::iterator it=clusterBB.begin();it!=clusterBB.end();it++)
+    {
+
+        // horizontal two lines
+        for(int col= it->lower_left_y;col <=it->upper_right_y;col++)
+        {
+            intmat[it->upper_right_x][col]=BB;
+            intmat[it->lower_left_x][col]=BB;
+        }
+        //vertical two lines
+        for(int row= it->upper_right_x;row <=it->lower_left_x;row++)
+        {
+            intmat[row][it->lower_left_y]=BB;
+            intmat[row][it->upper_right_y]=BB;
+        }
+    }
+
+    for (int ind_elev=0;ind_elev!=row;ind_elev++)
+    {
+        for (int ind_azim=0;ind_azim!=col;ind_azim++)
+
+            if (intmat[ind_elev][ind_azim]==2) //if its is BB
+                std::cout<<"* ";
+            else
+                std::cout<<intmat[ind_elev][ind_azim]<<" ";
+
+        std::cout<<"\n";
+
+    }
+
+}
+
+
+
+/**
+  Waypoint Proposal class
+**/
+
+
 //constructor 
 WaypointProposer::WaypointProposer(float elev_min,unsigned int N_azim,unsigned int N_elev,float track_d)
 {
@@ -47,156 +130,114 @@ void WaypointProposer::OctreeCallback(const octomap_msgs::Octomap& msg){
     this->octree_obj=(dynamic_cast<OcTree*>(octree));
 }
 
-// print out casted space
-
-inline void WaypointProposer::printCastspace(){
-
-    int count=0;
-    for (int it_elev =0 ; it_elev <N_elev; ++it_elev)
-    {
-        for (int it_azim = 0; it_azim < N_azim; ++it_azim)
-        {
-                std::cout<< cast_space[count]<<" ";
-                count++;
-
-        }
-            std::cout<<"\n";
-    }
-
-}
 
 
-// print out clusted casted space
-
-
-inline void WaypointProposer::printClusteredCastspace(std::vector<int>  NoneObstruded_count,DBSCAN::DBCAN dbscan){
-
-    int count=0; int search_count=0;
-    for (int ind_elev=0;ind_elev!=N_elev;ind_elev++)
-    {
-        for (int ind_azim=0;ind_azim!=N_azim;ind_azim++)
-        {
-
-            if(count==NoneObstruded_count[search_count]) // visible castspace
-            {
-
-
-                //print this point. if it is close to center, then check star
-                int this_cluster=dbscan.points[search_count].cluster;
-
-                if(this_cluster!=DBSCAN::NOISE)
-                    std::cout<<this_cluster<<" ";
-                else
-                    std::cout<< "#"<<" " ;// treat NOISE as non-visible
-
-
-                search_count++;
-
-            }
-            else
-                std::cout<< "#"<<" " ;// non-visible castspace
-
-            count++;
-
-
-        }
-        std::cout<<"\n";
-    }
-
-}
 
 // for query, we find clustered castspace
-ClusteredCastSpace WaypointProposer::castRayandClustering(geometry_msgs::Point query_point,bool verbose=false)
+CastResult WaypointProposer::castRayandClustering(geometry_msgs::Point query_point,bool verbose)
 {
 
-    ClusteredCastSpace clustered_castspace;
-
+    std::vector<DBSCAN::Point> visible_space;
+    CastResult castresult(N_elev,N_azim);    
+    
     if(octree_obj->size())
     {
-        std::vector<int> NoneObstruded_count; // when is visible in the castspace vector?
+        
         bool ignoreUnknownCells = true;
         std::vector<double> azimuth_iter=linspace(float(0),float(2*PI),float(N_azim));
         std::vector<double> elevation_iter=linspace(float(elev_min),float(PI/2.0),float(N_elev));
+        
         point3d light_end; //will not be used
         point3d light_start(query_point.x,query_point.y,query_point.z);
-
-        int count=0,NumNoneObstruded=0;
-
-        int ind_elev=0,ind_azim=0;
-        //visible cast space
-        for (std::vector<double>::iterator it_elev = elevation_iter.begin() ; it_elev != elevation_iter.end(); ++it_elev)
+        
+        
+        // ray casting 
+        for (int ind_elev=0;ind_elev<N_elev; ind_elev++)
         {
-            ind_azim=0;
-            for (std::vector<double>::iterator it_azim = azimuth_iter.begin() ; it_azim != azimuth_iter.end(); ++it_azim)
+            
+            for (int ind_azim=0;ind_azim<N_azim;ind_azim++)
             {
-                  point3d light_dir(tracking_distance*cos(*it_elev)*cos(*it_azim),
-                    tracking_distance*cos(*it_elev)*sin(*it_azim),
-                    tracking_distance*sin(*it_elev));
-                    cast_space[count]=octree_obj->castRay(light_start,light_dir,light_end,ignoreUnknownCells);
+               
+                point3d light_dir(tracking_distance*cos(elevation_iter[ind_elev])*cos(azimuth_iter[ind_azim]),
+                  tracking_distance*cos(elevation_iter[ind_elev])*sin(azimuth_iter[ind_azim]),
+                  tracking_distance*sin(elevation_iter[ind_elev]));
+                 
+                // 1 : invisible 0 : visible
+                castresult.mat[ind_elev][ind_azim]= octree_obj->castRay(light_start,light_dir,light_end,ignoreUnknownCells);
 
-                // if the ray is not obstruded by voxel.
-                if (!cast_space[count])
+                // for visible castspace, we need to cluster them
+                if (!castresult.mat[ind_elev][ind_azim])
                 {
-                    // keep this count
-                    NoneObstruded_count.push_back(count);
-                    //for clustering, visible region
-
-                    DBSCAN::Point pnt({ind_azim,ind_elev,0,DBSCAN::NOT_CLASSIFIED});
-                    clustered_castspace.push_back(pnt);
-
-                    ++NumNoneObstruded;
-
+                    DBSCAN::Point pnt({ind_elev,ind_azim,0,DBSCAN::NOT_CLASSIFIED});
+                    visible_space.push_back(pnt);
                 }
-                ind_azim++;
-                count++;
+                                
             }
 
-            ind_elev++;
         }
-
-        //clustering
-
+        
+            
+        // clustering         
         const double epsilon=1.1;
         const int max_group_number=3;
         unsigned int minpts=2; // need to be tuned
-
-        if(clustered_cast_space.size()) // if there is any visible ray
+        
+        if(visible_space.size())
         {
-
-            DBSCAN::DBCAN dbscan(max_group_number,epsilon,minpts,clustered_castspace);
+         
+            DBSCAN::DBCAN dbscan(max_group_number,epsilon,minpts,visible_space);
             dbscan.run();
-            //TODO: find cluser bounding box for each cluster
+            
+            int  Ncluster=dbscan.cluster.size();
+            castresult.Ncluster=Ncluster;
+            castresult.clusterBB.reserve(Ncluster);
+            // we need to find cluster BB(bounding box). from them, we obtain PB(proposal box)
+
+            for (int cluster_idx=0;cluster_idx<Ncluster;cluster_idx++)
+            {
+
+                Box clusterBB;
+                std::vector<int>::iterator it=dbscan.cluster[cluster_idx].begin();
+                clusterBB.lower_left_x=clusterBB.upper_right_x=visible_space[*it].x;
+                clusterBB.lower_left_y=clusterBB.upper_right_y=visible_space[*it].y;
 
 
+                //... worry
+                it++;
+                for(;it!=dbscan.cluster[cluster_idx].end();it++)
+                {
 
+                    clusterBB.lower_left_x=std::max(visible_space[*it].x,clusterBB.lower_left_x);  //row
+                    clusterBB.lower_left_y=std::min(visible_space[*it].y,clusterBB.lower_left_y);  //col
 
-            // print out if clustering is completed
-            if(verbose)
-             printClusteredCastspace(NoneObstruded_count,dbscan);
+                    clusterBB.upper_right_x=std::min(visible_space[*it].x,clusterBB.upper_right_x);
+                    clusterBB.upper_right_y=std::max(visible_space[*it].y,clusterBB.upper_right_y);
+
+                 }
+
+                castresult.clusterBB.push_back(clusterBB);
+
+                
+            }
+        //rayCast result print
+        if(verbose)
+            castresult.printResult();
 
         }
         else
-            ROS_WARN("All rays were obstruded");
-
-    }
-    else
-        ROS_WARN("No octree.");
+        ROS_WARN("No visible castspace");
+        
 
 
+    } else ROS_WARN("No octree ");
 
-    return clustered_castspace;
 
+    return castresult;
 }
 
 
-
-
-
 // for clustered castspace we propose corresponding region proposal
-std::vector<Box> regionProposal(ClusteredCastSpace clustered_castspace,bool verbose=false);
-
-
-
+//ProposedView regionProposal(CastResult castResult,bool verbose=false)
 
 
 
@@ -206,48 +247,42 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
     
 
 
-    ClusteredCastSpace clustered_cast_space;
     castedLightMarker.points.clear();
-    bool verbose(true);
 
     if(octree_obj->size())
 
     {
 
 
-    //for now, we don't know exact number of none-obstruded rays
+        // perform raycast and clustering
+        geometry_msgs::Point point;
+        point.x=(req.query_pose.x); point.y=(req.query_pose.y); point.z=(req.query_pose.z);
+
+        CastResult castresult=castRayandClustering(point,true);
 
 
-        std::vector<int> NoneObstruded_count;
+        // castRay Rviz
+
         bool ignoreUnknownCells = true;
-        double 	maxRange = tracking_distance;
 
         std::vector<double> azimuth_iter=linspace(float(0),float(2*PI),float(N_azim));
         std::vector<double> elevation_iter=linspace(float(elev_min),float(PI/2.0),float(N_elev));
         point3d light_end;
         point3d light_start(req.query_pose.x,req.query_pose.y,req.query_pose.z);
             
-                
-        int count=0,NumNoneObstruded=0;
-
-        int ind_elev=0,ind_azim=0;
 
         for (std::vector<double>::iterator it_elev = elevation_iter.begin() ; it_elev != elevation_iter.end(); ++it_elev)
         {
-            ind_azim=0;
+            int ind_azim=0;
             for (std::vector<double>::iterator it_azim = azimuth_iter.begin() ; it_azim != azimuth_iter.end(); ++it_azim)    
             {
                   point3d light_dir(tracking_distance*cos(*it_elev)*cos(*it_azim),
                     tracking_distance*cos(*it_elev)*sin(*it_azim),
                     tracking_distance*sin(*it_elev));
-                    cast_space[count]=octree_obj->castRay(light_start,light_dir,light_end,ignoreUnknownCells); 
-                
-                // if the ray is not obstruded by voxel.
-                if (!cast_space[count])
-                {   
-                    // keep this count
-                    NoneObstruded_count.push_back(count);
 
+                // if the ray is not obstruded by voxel.
+                if(!octree_obj->castRay(light_start,light_dir,light_end,ignoreUnknownCells))
+                {
                     // vizualization marker 
                     geometry_msgs::Point p;
 
@@ -263,55 +298,11 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
 
 
                     castedLightMarker.points.push_back(p);
-
-
-                    //for clustering, visible region
-
-                    DBSCAN::Point pnt({ind_azim,ind_elev,0,DBSCAN::NOT_CLASSIFIED});
-                    clustered_cast_space.push_back(pnt);
-
-
-                    ++NumNoneObstruded;
-
                 }
-                ind_azim++;
-                count++;
 
             }
-
-            ind_elev++;
         }
 
-
-        if (verbose) //print cast space
-        {
-            printCastspace();
-            printf("---------------------------------------\n");
-
-        }
-
-
-        // Clustering
-        double epsilon=1.1;
-        unsigned int minpts=2; // need to be tuned
-
-        if(clustered_cast_space.size()) // if there is any visible ray
-        {
-
-            DBSCAN::DBCAN dbscan(5,epsilon,minpts,clustered_cast_space);
-            dbscan.run();
-
-            //let's obtain the center of each clustered
-            std::vector<std::vector<double>> cluster_centers=dbscan.getClusterCenter();
-
-
-            // print out if clustering is completed
-            if(verbose)
-             printClusteredCastspace(NoneObstruded_count,dbscan);
-
-        }
-        else
-            ROS_WARN("All rays were obstruded");
 
     }
     else ROS_INFO_STREAM("octree is empty\n");

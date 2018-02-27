@@ -83,7 +83,7 @@ public:
     }
     // is idx'th point core object?
     bool isCoreObject(int idx) {
-        return points[idx].ptsCnt >= mi2Pts;
+        return points[idx].ptsCnt >= minPts;
     }
 
     std::vector<std::vector<int> > getCluster() {
