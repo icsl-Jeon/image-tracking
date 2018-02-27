@@ -110,6 +110,7 @@ ClusteredCastSpace WaypointProposer::castRayandClustering(geometry_msgs::Point q
 {
 
     ClusteredCastSpace clustered_castspace;
+    CastResult cast_result; 
 
     if(octree_obj->size())
     {
@@ -167,28 +168,27 @@ ClusteredCastSpace WaypointProposer::castRayandClustering(geometry_msgs::Point q
             dbscan.run();
             //TODO: find cluser bounding box for each cluster
 
-
-
-
             // print out if clustering is completed
             if(verbose)
              printClusteredCastspace(NoneObstruded_count,dbscan);
 
         }
         else
+    
+            
+            
             ROS_WARN("All rays were obstruded");
-
     }
     else
         ROS_WARN("No octree.");
 
+    
+    
 
 
     return clustered_castspace;
 
 }
-
-
 
 
 

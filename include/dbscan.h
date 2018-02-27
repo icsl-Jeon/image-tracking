@@ -40,12 +40,12 @@ public:
         this->clusterIdx=-1;
     }
     void run () {
-        checkNearPoints();
+        checkNearPoints(); //adjoint matrix
 
         for(int i=0;i<size;i++) {
             if(points[i].cluster != NOT_CLASSIFIED) continue;
 
-            if(isCoreObject(i)) {
+            if(isCoreObject(i)) { // does this pnt have enough connected points?
                 dfs(i, ++clusterIdx);
             } else {
                 points[i].cluster = NOISE;
@@ -83,7 +83,7 @@ public:
     }
     // is idx'th point core object?
     bool isCoreObject(int idx) {
-        return points[idx].ptsCnt >= minPts;
+        return points[idx].ptsCnt >= mi2Pts;
     }
 
     std::vector<std::vector<int> > getCluster() {
@@ -92,12 +92,14 @@ public:
 
     std::vector<std::vector<double>> getClusterCenter(){
         std::vector<std::vector<double>> cluster_centers;
-        for(int i=0;i<cluster.size();i++)
+
+        for(int i=0;i<cluster.size();i++) //per cluster
         {
             double cur_cluster_center_x=0;
             double cur_cluster_center_y=0;
 
             for(int j=0;j<cluster[i].size();j++)
+
             {   cur_cluster_center_x+=points[cluster[i][j]].x;
                 cur_cluster_center_y+=points[cluster[i][j]].y;
             };

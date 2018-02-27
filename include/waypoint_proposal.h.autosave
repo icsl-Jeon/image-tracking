@@ -30,17 +30,11 @@
 typedef std::vector<bool> CastSpace;  //1D azi-elev space (flattened)
 typedef std::vector<DBSCAN::Point> ClusteredCastSpace; //2D azi-elev space. x,y member is index
 typedef std::vector<CastSpace> CastSpaceBuffer; // buffer of CastSpace
-typedef std::vector< std::vector<bool> > boolMatrix;
+typedef std::vector< std::vector<bool> > boolMatrix; // bool matrix 
 
 
 using namespace octomap;
 
-/**
- TODO : 
-
-
-
-**/
 
 struct Box{
 
@@ -70,21 +64,16 @@ struct CastResult{
         }
 
         return mat;
-
-
     };
-
-
 };
 
 
 
-class ProposedCasespace{
+class ProposedCastspace{
 
     public:
         std::vector<Box> ProposedBoxes; //proposed castspace regions
         double secs; //time stamp
-
 };
 
 
