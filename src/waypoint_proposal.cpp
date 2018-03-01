@@ -204,7 +204,7 @@ CastResult WaypointProposer::castRayandClustering(geometry_msgs::Point query_poi
                   tracking_distance*sin(elevation_iter[ind_elev]));
                  
                 // 1 : invisible 0 : visible
-                castresult.mat[ind_elev][ind_azim]= octree_obj->castRay(light_start,light_dir,light_end,ignoreUnknownCells);
+                castresult.mat[ind_elev][ind_azim]= octree_obj->castRay(light_start,light_dir,light_end,ignoreUnknownCells,5.0);
 
                 // for visible castspace, we need to cluster them
                 if (!castresult.mat[ind_elev][ind_azim])
@@ -304,16 +304,20 @@ ProposedView WaypointProposer::regionProposal(CastResult castResult,bool verbose
                     row_vector.push_back(1-castResult.mat[i-transl_x][j-transl_y]);
                 matrix.push_back(row_vector);
             }
-            //TODO : if we have two or more in one cluster?
-            Box bb_cur_cluster=maxRectangle(matrix);
+            //if we have two or more in one cluster?
+            std::vector<Box> bb_cur_cluster=maxRectangle(matrix);
+            for(std::vector<Box>::iterator it=bb_cur_cluster.begin();it!=bb_cur_cluster.end();it++)
+            {
 
-            bb_cur_cluster.lower_left_x-=transl_x;
-            bb_cur_cluster.upper_right_x-=transl_x;
-            bb_cur_cluster.lower_left_y-=transl_y;
-            bb_cur_cluster.upper_right_y-=transl_y;
+                it->lower_left_x-=transl_x;
+                it->upper_right_x-=transl_x;
+                it->lower_left_y-=transl_y;
+                it->upper_right_y-=transl_y;
 
-            proposedView.ProposedBoxes.push_back(bb_cur_cluster);
-            
+                proposedView.ProposedBoxes.push_back(*it);
+            }
+
+        //std::cout<<proposedView.ProposedBoxes.size()<<std::endl;
         }
     if (verbose)
         proposedView.printProposedView(castResult);
@@ -364,7 +368,7 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
                     tracking_distance*sin(*it_elev));
 
                 // if the ray is not obstruded by voxel.
-                if(!octree_obj->castRay(light_start,light_dir,light_end,ignoreUnknownCells))
+                if(!octree_obj->castRay(light_start,light_dir,light_end,ignoreUnknownCells,5.0))
                 {
                     // vizualization marker 
                     geometry_msgs::Point p;
