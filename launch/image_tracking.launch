@@ -13,14 +13,17 @@
     <arg name="world_name" value="$(find rotors_gazebo)/worlds/$(arg world_name).world" />
     <arg name="paused" value="true"/>
     <arg name="gui" value="false"/> 
+    
   </include>
+    
+    
     
     <!--octomap_server -->
   
   <include file="$(find octomap_server)/launch/octomap_tracking_server.launch">
     <arg name="world_name" value="world" />
     <arg name="mav_name" value="$(arg mav_name)"/>
-    <arg name="resolution" value="0.2"/>
+    <arg name="resolution" value="0.1"/>
     <arg name="max_range" value="4.0"/>
     <arg name="height_map" value="true"/>	
     <arg name="sensor_miss" value="0.2"/>
@@ -28,6 +31,34 @@
     <arg name="clamping_min" value="0.12"/>
     <arg name="clamping_max" value="0.8"/>
   </include>
+  
+  
+  <!-- target spawn -->
+  <group ns ="target">
+  <include file="$(find turtlebot_gazebo)/launch/includes/kobuki.launch.xml">
+    <arg name="base" value="kobuki"/>
+    <arg name="stacks" value="hexagons"/>
+    <arg name="robot_name" value="target"/>	 
+    <arg name="3d_sensor" value="kinect"/>
+    <arg name="init_pose" value="-x 2.5 -y 0.5"/>
+  </include>
+  
+  	<!-- keyboard control-->
+  <node pkg="turtlebot_teleop" type="turtlebot_teleop_key" name="turtlebot_teleop_keyboard"  output="screen" launch-prefix="xterm -e">
+    <param name="scale_linear" value="0.5" type="double"/>
+    <param name="scale_angular" value="1.5" type="double"/>
+    <remap from="turtlebot_teleop_keyboard/cmd_vel" to="cmd_vel_mux/input/teleop"/>
+  </node>
+  
+  </group>
+  
+  <!-- setting tf a fixed frame to base tf -->
+  
+  <node name="tf_mapper_from_world_to_target" pkg="adding_fixed_tf_gazebo" type="adding_fixed_tf_gazebo_node">
+  	<param name="fixed_tf_name" value="world"/>
+  	<param name="odom_tf_name" value="target"/>
+  
+  </node>
   
   
    <!-- group name/model spawn -->
