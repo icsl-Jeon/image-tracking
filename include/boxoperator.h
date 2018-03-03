@@ -19,7 +19,10 @@ struct Box{
     Box(): upper_right_x(0),upper_right_y(0),lower_left_x(0),lower_left_y(0),area(0){}
 };
 
-
+//for sort purpose, we define like inverse!!!!1
+inline bool operator <(const Box &a, const Box &b){
+    return a.area > b.area;
+}
 typedef std::vector< std::vector<bool> > boolMatrix; // bool matrix 
 typedef std::vector< std::vector<int> > intMatrix;
 

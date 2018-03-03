@@ -139,7 +139,8 @@ this->N_elev=N_elev;
 this->cast_space.reserve(N_azim*N_elev);
 
 ros::NodeHandle nh;
-this->Octbin_sub=nh.subscribe("/octomap_binary",10,&WaypointProposer::OctreeCallback,this);
+this->targetPath_sub=nh.subscribe("/target_predition_path",1,&WaypointProposer::targetPathCallback,this);
+this->Octbin_sub=nh.subscribe("/octomap_full",10,&WaypointProposer::OctreeCallback,this);
 this->server_query = nh.advertiseService("cast_query", &WaypointProposer::QueryfromTarget,this);
 this->server_debug = nh.advertiseService("octomap_leaf_debug", &WaypointProposer::OctreeDebug,this);
 this->marker_pub=nh.advertise<visualization_msgs::Marker>("casted_light", 10);
@@ -166,9 +167,15 @@ WaypointProposer::~WaypointProposer(void) {
 }
 
 void WaypointProposer::OctreeCallback(const octomap_msgs::Octomap& msg){
-    AbstractOcTree* octree=octomap_msgs::binaryMsgToMap(msg);
+    AbstractOcTree* octree=octomap_msgs::fullMsgToMap(msg);
     //octree updater
     this->octree_obj=(dynamic_cast<OcTree*>(octree));
+}
+
+
+void WaypointProposer::targetPathCallback(const nav_msgs::Path& msg){
+    //path update
+    this->pred_target=msg;
 }
 
 
@@ -190,8 +197,10 @@ CastResult WaypointProposer::castRayandClustering(geometry_msgs::Point query_poi
         
         point3d light_end; //will not be used
         point3d light_start(query_point.x,query_point.y,query_point.z);
+
         
-        
+
+
         // ray casting 
         for (int ind_elev=0;ind_elev<N_elev; ind_elev++)
         {
@@ -205,6 +214,7 @@ CastResult WaypointProposer::castRayandClustering(geometry_msgs::Point query_poi
                  
                 // 1 : invisible 0 : visible
                 castresult.mat[ind_elev][ind_azim]= octree_obj->castRay(light_start,light_dir,light_end,ignoreUnknownCells,5.0);
+
 
                 // for visible castspace, we need to cluster them
                 if (!castresult.mat[ind_elev][ind_azim])
@@ -314,6 +324,8 @@ ProposedView WaypointProposer::regionProposal(CastResult castResult,bool verbose
                 it->lower_left_y-=transl_y;
                 it->upper_right_y-=transl_y;
 
+
+
                 proposedView.ProposedBoxes.push_back(*it);
             }
 
@@ -344,11 +356,27 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
         geometry_msgs::Point point;
         point.x=(req.query_pose.x); point.y=(req.query_pose.y); point.z=(req.query_pose.z);
 
+
+
         CastResult castresult=castRayandClustering(point,true);
         std::cout<<"---------------------------"<<std::endl;
         ProposedView proposedview=regionProposal(castresult,true);
 
-        // castRay Rviz
+
+        std::cout<<"total number of proposed box: "<<proposedview.ProposedBoxes.size()<<std::endl;
+        //sort in order of small area
+        std::sort(proposedview.ProposedBoxes.begin(),proposedview.ProposedBoxes.end());
+
+        for(int i=0;i<proposedview.ProposedBoxes.size();i++)
+            std::cout<<"area: "<<proposedview.ProposedBoxes[i].area<<std::endl;
+
+        // keep the beggest two
+        if (proposedview.ProposedBoxes.size()>1 && proposedview.ProposedBoxes[0].area*0.5<proposedview.ProposedBoxes[1].area)
+            proposedview.ProposedBoxes.erase(proposedview.ProposedBoxes.begin()+2,proposedview.ProposedBoxes.end());
+        else
+            proposedview.ProposedBoxes.erase(proposedview.ProposedBoxes.begin()+1,proposedview.ProposedBoxes.end());
+
+
 
         bool ignoreUnknownCells = true;
 
@@ -356,8 +384,47 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
         std::vector<double> elevation_iter=linspace(float(elev_min),float(PI/2.0),float(N_elev));
         point3d light_end;
         point3d light_start(req.query_pose.x,req.query_pose.y,req.query_pose.z);
-            
 
+        // castRay from light source to proposoed view angle (max # = 2)
+        std::vector<Box> PV=proposedview.ProposedBoxes;
+        for (std::vector<Box>::iterator it=PV.begin();it!=PV.end();it++)
+        {
+
+
+
+            //proposed view point
+            double PV_azim=(azimuth_iter[it->upper_right_y]+azimuth_iter[it->lower_left_y])/2;
+            double PV_elev=(elevation_iter[it->lower_left_x]+elevation_iter[it->upper_right_x])/2;
+
+            std::cout<<"proposed center: ["<<PV_azim<<" , "<<PV_elev<<"]"<<std::endl;
+
+
+            point3d light_dir(tracking_distance*cos(PV_elev)*cos(PV_azim),
+              tracking_distance*cos(PV_elev)*sin(PV_azim),
+              tracking_distance*sin(PV_elev));
+
+
+            geometry_msgs::Point p;
+
+            p.x=light_start.x();
+            p.y=light_start.y();
+            p.z=light_start.z();
+
+            castedLightMarker.points.push_back(p);
+
+            p.x=light_start.x()+light_dir.x();
+            p.y=light_start.y()+light_dir.y();
+            p.z=light_start.z()+light_dir.z();
+
+            castedLightMarker.points.push_back(p);
+
+
+        }
+
+
+        // castRay from light source to all around in Rviz
+
+        /**
         for (std::vector<double>::iterator it_elev = elevation_iter.begin() ; it_elev != elevation_iter.end(); ++it_elev)
         {
             int ind_azim=0;
@@ -389,7 +456,7 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
 
             }
         }
-
+        **/
 
     }
     else ROS_INFO_STREAM("octree is empty\n");
@@ -404,14 +471,17 @@ void WaypointProposer::marker_publish(){
 
 }
 
+
 bool WaypointProposer::OctreeDebug(image_tracking::Debug::Request &req, image_tracking::Debug::Response &res){
     
     ROS_INFO("octree size: %f\n",this->octree_obj->size());
     
     for(OcTree::leaf_iterator it = this->octree_obj->begin_leafs(),end_it=this->octree_obj->end_leafs(); it!=end_it; ++it)
     {
-       ROS_INFO_STREAM("Node center"<<it.getCoordinate()<<" Depth: "<<it.getDepth()<<" Size: "<<it.getSize()
-       <<" p: "<<exp(it->getValue())/(exp(it->getValue())+1)<<"\n");
+       float p= exp(it->getValue())/(exp(it->getValue())+1);
+
+               ROS_INFO_STREAM("Node center"<<it.getCoordinate()<<" Depth: "<<it.getDepth()<<" Size: "<<it.getSize()
+       <<" p: "<<p<<"\n");
 
     }
     return true;

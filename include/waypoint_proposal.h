@@ -3,6 +3,7 @@
 
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h> 
+#include <nav_msgs/Path.h>
 #include <stdio.h>
 #include <octomap/octomap.h>
 #include <octomap/OcTree.h>
@@ -75,7 +76,7 @@ class WaypointProposer{
         unsigned int N_elev; //how many elevation sample in [elev_min, PI/2]
         bool QueryfromTarget( image_tracking::CastQuery::Request&, image_tracking::CastQuery::Response&);  
         bool OctreeDebug(image_tracking::Debug::Request& , image_tracking::Debug::Response&);  
-
+        nav_msgs::Path pred_target;  //predicted target path
 
         CastSpace cast_space;
         CastSpaceBuffer cast_space_buffer;
@@ -86,6 +87,7 @@ class WaypointProposer{
 
         //ROS 
         ros::Subscriber Octbin_sub;
+        ros::Subscriber targetPath_sub;
         ros::ServiceServer server_query;
         ros::ServiceServer server_debug;
         ros::Publisher marker_pub;
@@ -105,6 +107,7 @@ class WaypointProposer{
         //constructor
         //callback from octree
         void OctreeCallback(const octomap_msgs::Octomap&); 
+        void targetPathCallback(const nav_msgs::Path &);
         //for leaf node inspection
         //destructor
 

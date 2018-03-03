@@ -53,7 +53,7 @@ class pathManager:
             ts=np.array(self.time_stack)-self.time_stack[-1]
             obs_span=ts[-1]-ts[0]
             ts=ts/obs_span+1  # normalize to [0,1]
-            print ts
+            #print ts
             # normalize for stablity
             xs=[]; ys=[]; zs=[]
         # just perform regression as much as the stack has
@@ -100,8 +100,9 @@ if __name__ == "__main__":
     rospy.init_node('path_manager')
     target_name="target"
     observation_stack_size=5
-    pred_time=2
-    pred_num=5
+    pred_time=3 # prediction horizon
+    pred_num=5 # not that important ...
+
     manager=pathManager(target_name,0.05,observation_stack_size,pred_time,pred_num)
     
     r = rospy.Rate(10) # 10hz
