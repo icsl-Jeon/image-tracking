@@ -95,7 +95,8 @@
   <group ns="waypoint_proposal">
 	<node name="proposer" pkg="image_tracking" type="waypoint_proposal_from_octomap_node" output="screen">
 	<param name="track_d" type="double" value="2.0"/>
-	<param name="elev_min" type="double" value="$(eval 3.141592/6.0)"/>
+	<param name="elev_min" type="double" value="$(eval 3.141592/8.0)"/>
+	<param name="elev_max" type="double" value="$(eval 3.141592/4)"/>
 	<param name="N_azim" type="int" value="20"/>
 	<param name="N_elev" type="int" value="12"/>
 	</node>

@@ -72,6 +72,7 @@ class WaypointProposer{
     public:
         float tracking_distance; 
         float elev_min; //min elevation of ray from target light source 
+        float elev_max;
         unsigned int N_azim; //how many azimuth sample in [0, 2PI]
         unsigned int N_elev; //how many elevation sample in [elev_min, PI/2]
         bool QueryfromTarget( image_tracking::CastQuery::Request&, image_tracking::CastQuery::Response&);  
@@ -94,7 +95,7 @@ class WaypointProposer{
         void marker_publish();
 
         //Constructor / Destructor
-        WaypointProposer(float,unsigned int,unsigned int,float);
+        WaypointProposer(float,float,unsigned int,unsigned int,float);
         ~ WaypointProposer();
                 
         // Ray casting

@@ -128,7 +128,7 @@ void ProposedView::printProposedView(const CastResult & castresult){
 
 
 //constructor 
-WaypointProposer::WaypointProposer(float elev_min,unsigned int N_azim,unsigned int N_elev,float track_d)
+WaypointProposer::WaypointProposer(float elev_min,float elev_max,unsigned int N_azim,unsigned int N_elev,float track_d)
 {
 //ROS_INFO("constructor init");
 this->octree_obj=NULL; //fake initialization
@@ -137,6 +137,7 @@ this->elev_min=elev_min;
 this->N_azim=N_azim;
 this->N_elev=N_elev;
 this->cast_space.reserve(N_azim*N_elev);
+this->elev_max=elev_max;
 
 ros::NodeHandle nh;
 this->targetPath_sub=nh.subscribe("/target_predition_path",1,&WaypointProposer::targetPathCallback,this);
@@ -193,7 +194,7 @@ CastResult WaypointProposer::castRayandClustering(geometry_msgs::Point query_poi
         
         bool ignoreUnknownCells = true;
         std::vector<double> azimuth_iter=linspace(float(0),float(2*PI),float(N_azim));
-        std::vector<double> elevation_iter=linspace(float(elev_min),float(PI/2.0),float(N_elev));
+        std::vector<double> elevation_iter=linspace(float(elev_min),float(elev_max),float(N_elev));
         
         point3d light_end; //will not be used
         point3d light_start(query_point.x,query_point.y,query_point.z);
@@ -381,7 +382,7 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
         bool ignoreUnknownCells = true;
 
         std::vector<double> azimuth_iter=linspace(float(0),float(2*PI),float(N_azim));
-        std::vector<double> elevation_iter=linspace(float(elev_min),float(PI/2.0),float(N_elev));
+        std::vector<double> elevation_iter=linspace(float(elev_min),float(elev_max),float(N_elev));
         point3d light_end;
         point3d light_start(req.query_pose.x,req.query_pose.y,req.query_pose.z);
 
