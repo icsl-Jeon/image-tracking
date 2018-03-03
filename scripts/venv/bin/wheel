@@ -1,4 +1,4 @@
-#!/home/jbs/mavros_ws/src/rotors_simulator/image_tracking/scripts/venv/bin/python3.5
+#!/home/jbs/mavros_ws/src/rotors_simulator/image_tracking/scripts/venv/bin/python2.7
 
 # -*- coding: utf-8 -*-
 import re
