@@ -16,6 +16,8 @@ struct Box{
     double lower_left_x;
     double lower_left_y;
     int area;
+    double center_x ;
+    double center_y;
     Box(): upper_right_x(0),upper_right_y(0),lower_left_x(0),lower_left_y(0),area(0){}
 };
 

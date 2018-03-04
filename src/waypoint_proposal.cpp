@@ -121,6 +121,35 @@ void ProposedView::printProposedView(const CastResult & castresult){
 
 }
 
+// generate trajectory message
+geometry_msgs::Transform getPoseFromViewProposal(
+        geometry_msgs::Point target_pose,double tracking_distance,Box PV){
+
+
+    double PV_elev=PV.center_y;
+    double PV_azim=PV.center_x;
+
+
+    geometry_msgs::Transform transform;
+
+    geometry_msgs::Vector3 viewPosition;
+
+    viewPosition.x=target_pose.x+tracking_distance*cos(PV_elev)*cos(PV_azim);
+    viewPosition.y=target_pose.y+tracking_distance*cos(PV_elev)*sin(PV_azim);
+    viewPosition.z=target_pose.z+tracking_distance*sin(PV_elev);
+
+
+    geometry_msgs::Quaternion viewYaw;
+
+    double yaw=PV_azim;
+
+    viewYaw=tf::createQuaternionFromYaw(yaw);
+
+    transform.translation=viewPosition;
+    transform.rotation=viewYaw;
+
+    return transform;
+}
 
 /**
   Waypoint Proposal class
@@ -177,6 +206,7 @@ void WaypointProposer::OctreeCallback(const octomap_msgs::Octomap& msg){
 void WaypointProposer::targetPathCallback(const nav_msgs::Path& msg){
     //path update
     this->pred_target=msg;
+
 }
 
 
@@ -341,6 +371,94 @@ ProposedView WaypointProposer::regionProposal(CastResult castResult,bool verbose
 
 
 
+
+ProposedView WaypointProposer::viewProposal(geometry_msgs::Point point,bool verbose){
+
+
+    if(octree_obj->size())
+
+    {
+
+
+        // perform raycast and clustering
+
+
+        CastResult castresult=castRayandClustering(point,verbose);
+        std::cout<<"---------------------------"<<std::endl;
+        ProposedView proposedview=regionProposal(castresult,verbose);
+
+
+        //std::cout<<"total number of proposed box: "<<proposedview.ProposedBoxes.size()<<std::endl;
+
+        //sort in order of small area
+        std::sort(proposedview.ProposedBoxes.begin(),proposedview.ProposedBoxes.end());
+
+        for(int i=0;i<proposedview.ProposedBoxes.size();i++)
+            std::cout<<"area: "<<proposedview.ProposedBoxes[i].area<<std::endl;
+
+        // keep the beggest two
+        if (proposedview.ProposedBoxes.size()>1 && proposedview.ProposedBoxes[0].area*0.5<proposedview.ProposedBoxes[1].area)
+            proposedview.ProposedBoxes.erase(proposedview.ProposedBoxes.begin()+2,proposedview.ProposedBoxes.end());
+        else
+            proposedview.ProposedBoxes.erase(proposedview.ProposedBoxes.begin()+1,proposedview.ProposedBoxes.end());
+
+
+
+        bool ignoreUnknownCells = true;
+
+        std::vector<double> azimuth_iter=linspace(float(0),float(2*PI),float(N_azim));
+        std::vector<double> elevation_iter=linspace(float(elev_min),float(elev_max),float(N_elev));
+
+
+        point3d light_end;
+        point3d light_start(req.query_pose.x,req.query_pose.y,req.query_pose.z);
+
+        // castRay from light source to proposoed view angle (max # = 2)
+        std::vector<Box>  &PV=proposedview.ProposedBoxes;
+        for (std::vector<Box>::iterator it=PV.begin();it!=PV.end();it++)
+        {
+
+
+            //proposed view point
+            double PV_azim=(azimuth_iter[it->upper_right_y]+azimuth_iter[it->lower_left_y])/2;
+            double PV_elev=(elevation_iter[it->lower_left_x]+elevation_iter[it->upper_right_x])/2;
+
+            //now convert to real physical value
+
+            it->center_x=PV_azim;
+            it->center_y=PV_elev;
+
+            int idx_lower_left_x=it->lower_left_x;
+            int idx_lower_left_y=it->lower_left_y;
+            int idx_upper_right_x=it->upper_right_x;
+            int idx_upper_right_y=it->upper_right_y;
+
+            it->lower_left_x=azimuth_iter[idx_lower_left_y];
+            it->lower_left_y=elevation_iter[idx_upper_right_x];
+            it->upper_right_x=azimuth_iter[idx_upper_right_y];
+            it->upper_right_y=elevation_iter[idx_lower_left_x];
+
+            /**
+            std::cout<<"proposed center: ["<<PV_azim<<" , "<<PV_elev<<"]"<<std::endl;
+
+            std::cout<<"lower left: ["<<it->lower_left_x<<" , "<<it->lower_left_y<<"]"<<std::endl;
+            std::cout<<"upper_right: ["<< it->upper_right_x<<" , "<<it->upper_right_y<<"]"<<std::endl;
+            **/
+
+
+        }
+
+    }
+    else
+    ROS_WARN("no octree in proposer yet");
+
+
+    return proposedview;
+
+
+}
+
+
 // query
 bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req, image_tracking::CastQuery::Response &resp){
     
@@ -387,7 +505,7 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
         point3d light_start(req.query_pose.x,req.query_pose.y,req.query_pose.z);
 
         // castRay from light source to proposoed view angle (max # = 2)
-        std::vector<Box> PV=proposedview.ProposedBoxes;
+        std::vector<Box>  PV=proposedview.ProposedBoxes;
         for (std::vector<Box>::iterator it=PV.begin();it!=PV.end();it++)
         {
 
@@ -397,8 +515,27 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
             double PV_azim=(azimuth_iter[it->upper_right_y]+azimuth_iter[it->lower_left_y])/2;
             double PV_elev=(elevation_iter[it->lower_left_x]+elevation_iter[it->upper_right_x])/2;
 
+            //now convert to real physical value
+
+            it->center_x=PV_azim;
+            it->center_y=PV_elev;
+
+            int idx_lower_left_x=it->lower_left_x;
+            int idx_lower_left_y=it->lower_left_y;
+            int idx_upper_right_x=it->upper_right_x;
+            int idx_upper_right_y=it->upper_right_y;
+
+            it->lower_left_x=azimuth_iter[idx_lower_left_y];
+            it->lower_left_y=elevation_iter[idx_upper_right_x];
+            it->upper_right_x=azimuth_iter[idx_upper_right_y];
+            it->upper_right_y=elevation_iter[idx_lower_left_x];
+
+            /**
             std::cout<<"proposed center: ["<<PV_azim<<" , "<<PV_elev<<"]"<<std::endl;
 
+            std::cout<<"lower left: ["<<it->lower_left_x<<" , "<<it->lower_left_y<<"]"<<std::endl;
+            std::cout<<"upper_right: ["<< it->upper_right_x<<" , "<<it->upper_right_y<<"]"<<std::endl;
+            **/
 
             point3d light_dir(tracking_distance*cos(PV_elev)*cos(PV_azim),
               tracking_distance*cos(PV_elev)*sin(PV_azim),
