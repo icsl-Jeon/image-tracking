@@ -16,6 +16,7 @@
 #include <geometry_msgs/Vector3.h>
 #include <geometry_msgs/Quaternion.h>
 #include <geometry_msgs/Transform.h>
+#include <tf/transform_datatypes.h>
 #include <trajectory_msgs/MultiDOFJointTrajectoryPoint.h>
 
 #include <math.h>
@@ -92,6 +93,8 @@ class WaypointProposer{
         OcTree* octree_obj;
         //Marker
         visualization_msgs::Marker castedLightMarker;
+        visualization_msgs::Marker yawingMarker;
+        std::vector<visualization_msgs::Marker> yawingMarkerList;
 
         //ROS 
         ros::Subscriber Octbin_sub;
@@ -99,6 +102,7 @@ class WaypointProposer{
         ros::ServiceServer server_query;
         ros::ServiceServer server_debug;
         ros::Publisher marker_pub;
+        ros::Publisher yawingArrow_pub;
         void marker_publish();
 
         //Constructor / Destructor
@@ -109,6 +113,9 @@ class WaypointProposer{
         CastResult castRayandClustering(geometry_msgs::Point,bool=false);
         // Observation proposal
         ProposedView regionProposal(CastResult,bool=false);
+
+        // final processing
+        ProposedView viewProposal(geometry_msgs::Point,bool);
 
 
     private:

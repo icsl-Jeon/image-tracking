@@ -141,9 +141,9 @@ geometry_msgs::Transform getPoseFromViewProposal(
 
     geometry_msgs::Quaternion viewYaw;
 
-    double yaw=PV_azim;
+    double yaw=PV_azim+PI;
 
-    viewYaw=tf::createQuaternionFromYaw(yaw);
+    viewYaw=tf::createQuaternionMsgFromYaw(yaw);
 
     transform.translation=viewPosition;
     transform.rotation=viewYaw;
@@ -173,8 +173,14 @@ this->targetPath_sub=nh.subscribe("/target_predition_path",1,&WaypointProposer::
 this->Octbin_sub=nh.subscribe("/octomap_full",10,&WaypointProposer::OctreeCallback,this);
 this->server_query = nh.advertiseService("cast_query", &WaypointProposer::QueryfromTarget,this);
 this->server_debug = nh.advertiseService("octomap_leaf_debug", &WaypointProposer::OctreeDebug,this);
-this->marker_pub=nh.advertise<visualization_msgs::Marker>("casted_light", 10);
 
+
+
+this->marker_pub=nh.advertise<visualization_msgs::Marker>("casted_light", 10);
+this->yawingArrow_pub=nh.advertise<visualization_msgs::Marker>("proposed_yawing",10);
+
+
+//casted light
 
 castedLightMarker.header.frame_id = "world";
 castedLightMarker.header.stamp  = ros::Time::now();
@@ -184,9 +190,12 @@ castedLightMarker.pose.orientation.w = 1.0;
 castedLightMarker.id = 0;
 castedLightMarker.type = visualization_msgs::Marker::LINE_LIST;
 castedLightMarker.scale.x = 0.05;
-castedLightMarker.color.r = 1;
+castedLightMarker.color.b = 1;
 castedLightMarker.color.a = 0.5;
    
+
+
+
 }
 
 
@@ -369,7 +378,8 @@ ProposedView WaypointProposer::regionProposal(CastResult castResult,bool verbose
 }
 
 
-
+// this function picks the most visible view point from a given light source
+// also return in physical domain not the index
 
 
 ProposedView WaypointProposer::viewProposal(geometry_msgs::Point point,bool verbose){
@@ -385,12 +395,16 @@ ProposedView WaypointProposer::viewProposal(geometry_msgs::Point point,bool verb
 
         CastResult castresult=castRayandClustering(point,verbose);
         std::cout<<"---------------------------"<<std::endl;
-        ProposedView proposedview=regionProposal(castresult,verbose);
+        ProposedView proposedview=regionProposal(castresult,verbose); //it has view proposal more than two and it is index space
+
+
+
+        // after that, just pick two and convert to real space
 
 
         //std::cout<<"total number of proposed box: "<<proposedview.ProposedBoxes.size()<<std::endl;
 
-        //sort in order of small area
+        //sort in order of large area
         std::sort(proposedview.ProposedBoxes.begin(),proposedview.ProposedBoxes.end());
 
         for(int i=0;i<proposedview.ProposedBoxes.size();i++)
@@ -404,14 +418,9 @@ ProposedView WaypointProposer::viewProposal(geometry_msgs::Point point,bool verb
 
 
 
-        bool ignoreUnknownCells = true;
-
         std::vector<double> azimuth_iter=linspace(float(0),float(2*PI),float(N_azim));
         std::vector<double> elevation_iter=linspace(float(elev_min),float(elev_max),float(N_elev));
 
-
-        point3d light_end;
-        point3d light_start(req.query_pose.x,req.query_pose.y,req.query_pose.z);
 
         // castRay from light source to proposoed view angle (max # = 2)
         std::vector<Box>  &PV=proposedview.ProposedBoxes;
@@ -419,14 +428,16 @@ ProposedView WaypointProposer::viewProposal(geometry_msgs::Point point,bool verb
         {
 
 
-            //proposed view point
+            //proposed view point(= center of box)
             double PV_azim=(azimuth_iter[it->upper_right_y]+azimuth_iter[it->lower_left_y])/2;
             double PV_elev=(elevation_iter[it->lower_left_x]+elevation_iter[it->upper_right_x])/2;
 
-            //now convert to real physical value
 
             it->center_x=PV_azim;
             it->center_y=PV_elev;
+
+
+            //now convert to real physical value
 
             int idx_lower_left_x=it->lower_left_x;
             int idx_lower_left_y=it->lower_left_y;
@@ -448,116 +459,85 @@ ProposedView WaypointProposer::viewProposal(geometry_msgs::Point point,bool verb
 
         }
 
+        return proposedview;
+
+
     }
     else
-    ROS_WARN("no octree in proposer yet");
+    {
+      ROS_WARN( "no octree in proposer yet" );
+      return ProposedView(); //throw empty PV
 
-
-    return proposedview;
-
+    }
 
 }
+
 
 
 // query
 bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req, image_tracking::CastQuery::Response &resp){
     
 
-
     castedLightMarker.points.clear();
-
-    if(octree_obj->size())
-
-    {
+    yawingMarkerList.clear();
 
 
-        // perform raycast and clustering
-        geometry_msgs::Point point;
-        point.x=(req.query_pose.x); point.y=(req.query_pose.y); point.z=(req.query_pose.z);
+    geometry_msgs::Point point;
+    point.x=(req.query_pose.x); point.y=(req.query_pose.y); point.z=(req.query_pose.z);
 
 
+    ProposedView PV=viewProposal(point,true);
 
-        CastResult castresult=castRayandClustering(point,true);
-        std::cout<<"---------------------------"<<std::endl;
-        ProposedView proposedview=regionProposal(castresult,true);
-
-
-        std::cout<<"total number of proposed box: "<<proposedview.ProposedBoxes.size()<<std::endl;
-        //sort in order of small area
-        std::sort(proposedview.ProposedBoxes.begin(),proposedview.ProposedBoxes.end());
-
-        for(int i=0;i<proposedview.ProposedBoxes.size();i++)
-            std::cout<<"area: "<<proposedview.ProposedBoxes[i].area<<std::endl;
-
-        // keep the beggest two
-        if (proposedview.ProposedBoxes.size()>1 && proposedview.ProposedBoxes[0].area*0.5<proposedview.ProposedBoxes[1].area)
-            proposedview.ProposedBoxes.erase(proposedview.ProposedBoxes.begin()+2,proposedview.ProposedBoxes.end());
-        else
-            proposedview.ProposedBoxes.erase(proposedview.ProposedBoxes.begin()+1,proposedview.ProposedBoxes.end());
-
-
-
-        bool ignoreUnknownCells = true;
-
-        std::vector<double> azimuth_iter=linspace(float(0),float(2*PI),float(N_azim));
-        std::vector<double> elevation_iter=linspace(float(elev_min),float(elev_max),float(N_elev));
-        point3d light_end;
-        point3d light_start(req.query_pose.x,req.query_pose.y,req.query_pose.z);
-
-        // castRay from light source to proposoed view angle (max # = 2)
-        std::vector<Box>  PV=proposedview.ProposedBoxes;
-        for (std::vector<Box>::iterator it=PV.begin();it!=PV.end();it++)
+    int id_count=0;
+    if (PV.ProposedBoxes.size()) // if it has proposed view
+        for (std::vector<Box>::iterator it=PV.ProposedBoxes.begin();it!=PV.ProposedBoxes.end();it++)
         {
 
+            geometry_msgs::Transform proposedViewPose=getPoseFromViewProposal(point,tracking_distance,*it);
+
+            castedLightMarker.points.push_back(point);
 
 
-            //proposed view point
-            double PV_azim=(azimuth_iter[it->upper_right_y]+azimuth_iter[it->lower_left_y])/2;
-            double PV_elev=(elevation_iter[it->lower_left_x]+elevation_iter[it->upper_right_x])/2;
 
-            //now convert to real physical value
-
-            it->center_x=PV_azim;
-            it->center_y=PV_elev;
-
-            int idx_lower_left_x=it->lower_left_x;
-            int idx_lower_left_y=it->lower_left_y;
-            int idx_upper_right_x=it->upper_right_x;
-            int idx_upper_right_y=it->upper_right_y;
-
-            it->lower_left_x=azimuth_iter[idx_lower_left_y];
-            it->lower_left_y=elevation_iter[idx_upper_right_x];
-            it->upper_right_x=azimuth_iter[idx_upper_right_y];
-            it->upper_right_y=elevation_iter[idx_lower_left_x];
-
-            /**
-            std::cout<<"proposed center: ["<<PV_azim<<" , "<<PV_elev<<"]"<<std::endl;
-
-            std::cout<<"lower left: ["<<it->lower_left_x<<" , "<<it->lower_left_y<<"]"<<std::endl;
-            std::cout<<"upper_right: ["<< it->upper_right_x<<" , "<<it->upper_right_y<<"]"<<std::endl;
-            **/
-
-            point3d light_dir(tracking_distance*cos(PV_elev)*cos(PV_azim),
-              tracking_distance*cos(PV_elev)*sin(PV_azim),
-              tracking_distance*sin(PV_elev));
+            geometry_msgs::Point endPoint;
+            endPoint.x=proposedViewPose.translation.x;
+            endPoint.y=proposedViewPose.translation.y;
+            endPoint.z=proposedViewPose.translation.z;
 
 
-            geometry_msgs::Point p;
 
-            p.x=light_start.x();
-            p.y=light_start.y();
-            p.z=light_start.z();
 
-            castedLightMarker.points.push_back(p);
 
-            p.x=light_start.x()+light_dir.x();
-            p.y=light_start.y()+light_dir.y();
-            p.z=light_start.z()+light_dir.z();
+            //yawing angle arrow prototype
 
-            castedLightMarker.points.push_back(p);
+            yawingMarker.header.frame_id = "world";
+            yawingMarker.header.stamp  = ros::Time::now();
+            yawingMarker.ns = "yawing_arrow";
+            yawingMarker.action = visualization_msgs::Marker::ADD;
+            yawingMarker.id=id_count;
 
+            yawingMarker.type = visualization_msgs::Marker::ARROW;
+            yawingMarker.scale.x = 1;
+            yawingMarker.scale.y = 0.05;
+            yawingMarker.scale.z = 0.1;
+            yawingMarker.color.r = 1;
+            yawingMarker.color.a = 0.5;
+
+
+            yawingMarker.pose.position=endPoint;
+            yawingMarker.pose.orientation=proposedViewPose.rotation;
+
+            yawingMarkerList.push_back((yawingMarker));
+
+            castedLightMarker.points.push_back(endPoint);
+            id_count++;
 
         }
+
+
+
+
+        return true;
 
 
         // castRay from light source to all around in Rviz
@@ -596,16 +576,16 @@ bool WaypointProposer::QueryfromTarget( image_tracking::CastQuery::Request &req,
         }
         **/
 
-    }
-    else ROS_INFO_STREAM("octree is empty\n");
-    return true;
-
 }
 
 
 void WaypointProposer::marker_publish(){
     if (castedLightMarker.points.size())
         marker_pub.publish(castedLightMarker);
+    if (yawingMarkerList.size())
+        for (std::vector<visualization_msgs::Marker>::iterator it=yawingMarkerList.begin();
+             it!=yawingMarkerList.end();it++)
+         yawingArrow_pub.publish(*it);
 
 }
 
