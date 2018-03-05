@@ -229,7 +229,7 @@ castedLightMarker.pose.orientation.w = 1.0;
 castedLightMarker.id = 0;
 castedLightMarker.type = visualization_msgs::Marker::LINE_LIST;
 castedLightMarker.scale.x = 0.05;
-castedLightMarker.color.g = 1;
+castedLightMarker.color.r = 1;
 castedLightMarker.color.a = 0.5;
    
 
