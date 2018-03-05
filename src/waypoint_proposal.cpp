@@ -206,7 +206,7 @@ ros::NodeHandle nh;
 this->targetPath_sub=nh.subscribe("/target_predition_path",1,&WaypointProposer::targetPathCallback,this);
 this->Octbin_sub=nh.subscribe("/octomap_full",3,&WaypointProposer::OctreeCallback,this);
 this->PRs_sub=nh.subscribe("/proposal_ray_path",3,&WaypointProposer::PRsCallback,this);
-this->PBs_pub=nh.advertise<image_tracking::ProposalBoxes>("/proposal_box_path",2);
+this->PB_path_pub=nh.advertise<image_tracking::ProposalBoxPath>("/proposal_box_path",2);
 this->server_query = nh.advertiseService("cast_query", &WaypointProposer::QueryfromTarget,this);
 this->server_debug = nh.advertiseService("octomap_leaf_debug", &WaypointProposer::OctreeDebug,this);
 
@@ -324,7 +324,7 @@ void WaypointProposer::targetPathCallback(const nav_msgs::Path& msg){
 
     //clear Boxpath
 
-    image_tracking::ProposalBoxes PBs;
+    image_tracking::ProposalBoxPath BoxPath;
 
 
     //iterator through predicted path
@@ -348,21 +348,27 @@ void WaypointProposer::targetPathCallback(const nav_msgs::Path& msg){
         std::cout<<"proposal finished"<<std::endl;
 
         // it is not optimal.. we should get rid of Box struct. use ProposalBox
-        image_tracking::ProposalBox cur_PB;
+        image_tracking::ProposalBoxes cur_Boxes;
+
+
+        if (PV.ProposedBoxes.size()) // if it has proposed view , we plot center ray of PB
+            //iterate through PV (max=2)
+            for (std::vector<Box>::iterator it=PV.ProposedBoxes.begin();it!=PV.ProposedBoxes.end();it++)
+            {
+                image_tracking::ProposalBox cur_Box;
+                cur_Box.lower_left_point.x=it->lower_left_x;
+                cur_Box.lower_left_point.y=it->lower_left_y;
+                cur_Box.upper_right_point.x=it->upper_right_x;
+                cur_Box.upper_right_point.y=it->upper_right_y;
+                cur_Box.center.x=it->center_x;
+                cur_Box.center.y=it->center_y;
+
+                cur_Boxes.PBs.push_back(cur_Box);
+            }
 
 
 
-        cur_PB.lower_left_point.x=PV.ProposedBoxes[0].lower_left_x;
-        cur_PB.lower_left_point.y=PV.ProposedBoxes[0].lower_left_y;
-        cur_PB.upper_right_point.x=PV.ProposedBoxes[0].upper_right_x;
-        cur_PB.upper_right_point.y=PV.ProposedBoxes[0].upper_right_y;
-        cur_PB.center.x=PV.ProposedBoxes[0].center_x;
-        cur_PB.center.y=PV.ProposedBoxes[0].center_y;
-
-
-        // save PBs
-        PBs.PB_path.push_back(cur_PB);
-
+        BoxPath.PB_path.push_back(cur_Boxes);
 
         //after proposal, just save the marker.
         /**
@@ -388,7 +394,7 @@ void WaypointProposer::targetPathCallback(const nav_msgs::Path& msg){
 
     }
     //update PBs of proposer
-    this->PBs.PB_path=PBs.PB_path;
+    this->PB_path.PB_path=BoxPath.PB_path;
 
 }
 

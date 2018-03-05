@@ -1,1 +1,2 @@
-ProposalBox[] PB_path
+ProposalBox[] PBs
+

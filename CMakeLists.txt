@@ -56,6 +56,7 @@ add_message_files(
   FILES
   ProposalBox.msg
   ProposalBoxes.msg
+  ProposalBoxPath.msg
   ProposalRay.msg
   ProposalRays.msg
 

@@ -3,6 +3,7 @@
 import rospy
 import nav_msgs
 import numpy as np
+import itertools
 from gazebo_msgs.msg import ModelStates
 from geometry_msgs.msg import Pose
 from geometry_msgs.msg import PoseStamped
@@ -13,7 +14,7 @@ from image_tracking.msg import ProposalBox
 from image_tracking.msg import ProposalBoxes
 from image_tracking.msg import ProposalRays
 from image_tracking.msg import ProposalRay
-
+from image_tracking.msg import ProposalBoxPath
 
 class pathManager:
     def __init__(self, target_name, observation_rate, observation_stack_size, pred_time, pred_num):
@@ -21,7 +22,7 @@ class pathManager:
         self.observation_stack_size = observation_stack_size
 
         self.sub = rospy.Subscriber("/gazebo/model_states", ModelStates, self.gazebo_callback)
-        self.sub_PB=rospy.Subscriber("/proposal_box_path",ProposalBoxes,self.PBs_callback)
+        self.sub_PB=rospy.Subscriber("/proposal_box_path",ProposalBoxPath,self.PBs_callback)
         self.pub = rospy.Publisher("target_predition_path", nav_msgs.msg.Path)
         self.pub_PR = rospy.Publisher("/proposal_ray_path", ProposalRays)
 
@@ -29,13 +30,12 @@ class pathManager:
         self.time_stack = []
         self.predict_stack = Path()  # prediction stack (list of PoseStamped=path )
         self.predict_stack.header.frame_id = "world"
-
+        self.predict_start_time=0 # default
         self.pred_time = pred_time  # how long predict
         self.pred_num = pred_num  # how many predict
         self.obsservation_rate = observation_rate
         self.UAV_pose = Pose()
-
-
+        self.pred_velocity=[]  # poly 1th coefficient of x,y,z
         self.PR_Path = ProposalRays()
 
     def gazebo_callback(self, msg):
@@ -81,9 +81,8 @@ class pathManager:
             A0=A0+2*np.pi
         # predicted and proposed aimuth and elevation
 
-        PB_Path = list(msg.PB_path)
 
-        t_step = len(PB_Path) + 1  # 1(current)+5(prediction)
+        t_step = len(msg.PB_path) + 1  # 1(current)+5(prediction)
         # optimzation variables
         # [A0 A1 A2 ..An h0 h1 ... hn]
         Q_d_tmp = np.zeros((t_step, t_step))
@@ -116,42 +115,65 @@ class pathManager:
         Q_d = matrix(Q_d)
         q_d = matrix(np.zeros((2 * t_step, 1)))
 
+
         # visibility cost  & visiblity constraint
 
-        w_v = 0.8  # variational cost vs visiblity
-        Q_v = np.zeros((2 * t_step, 2 * t_step))
-        q_v = np.zeros((2 * t_step, 1))
+        list_ = []
+        for Boxes_iter in msg.PB_path:
+            cur_boxes = Boxes_iter.PBs
+            list_.append(cur_boxes)
 
-        # inequality constraint
-        A = np.zeros((4 * (t_step - 1) + 2, 2 * (t_step)))
-        b = np.zeros((4 * (t_step - 1) + 2, 1))
-        for idx in range(1, t_step):
-            cur_Box = PB_Path[idx - 1]
-            A_ic = cur_Box.center.x
-            h_ic = cur_Box.center.y
-            w_v_Ai = w_v / (cur_Box.upper_right_point.x - cur_Box.lower_left_point.x)*0.5
-            w_v_hi = w_v / (cur_Box.upper_right_point.y - cur_Box.lower_left_point.y)
-            Q_v[idx][idx] = w_v_Ai
-            Q_v[idx + t_step][idx + t_step] = w_v_hi
-            q_v[idx] = -2 * A_ic * w_v_Ai
-            q_v[idx + t_step] = -2 * h_ic * w_v_hi
-            A[2 * idx - 1][idx] = 1
-            A[2 * idx][idx] = -1
-            A[2 * idx - 1 + 2 * (t_step - 1) + 1][idx + t_step] = 1
-            A[2 * idx + 2 * (t_step - 1) + 1][idx + t_step] = -1
+        candidate_BoxPath = list(itertools.product(*list_))
 
-            b[2 * idx - 1] = cur_Box.upper_right_point.x
-            b[2 * idx] = -cur_Box.lower_left_point.x
-            b[2 * idx - 1 + 2 * (t_step - 1) + 1] = cur_Box.upper_right_point.y
-            b[2 * idx + 2 * (t_step - 1) + 1] = -cur_Box.lower_left_point.y
 
-        A = matrix(A)
-        b = matrix(b)
-        Q_v = matrix(Q_v)
-        q_v = matrix(q_v)
+        w_v = 0.5  # variational cost vs visiblity
+        cost_list = []
+        sol_list = []
+        for cur_PB_Path in candidate_BoxPath:
+            Q_v = np.zeros((2 * t_step, 2 * t_step))
+            q_v = np.zeros((2 * t_step, 1))
+            A = np.zeros((4 * (t_step - 1) + 2, 2 * (t_step)))
+            b = np.zeros((4 * (t_step - 1) + 2, 1))
+            c_v = 0  # should be considered !!
+            for idx in range(1, t_step):
+                cur_Box = cur_PB_Path[idx - 1]
+                A_ic = cur_Box.center.x
+                h_ic = cur_Box.center.y
+                w_v_Ai = w_v / (cur_Box.upper_right_point.x - cur_Box.lower_left_point.x)*0.5
+                w_v_hi = w_v / (cur_Box.upper_right_point.y - cur_Box.lower_left_point.y)
+                Q_v[idx][idx] = w_v_Ai
+                Q_v[idx + t_step][idx + t_step] = w_v_hi
+                q_v[idx] = -2 * A_ic * w_v_Ai
+                q_v[idx + t_step] = -2 * h_ic * w_v_hi
+                A[2 * idx - 1][idx] = 1
+                A[2 * idx][idx] = -1
+                A[2 * idx - 1 + 2 * (t_step - 1) + 1][idx + t_step] = 1
+                A[2 * idx + 2 * (t_step - 1) + 1][idx + t_step] = -1
 
-        sol = solvers.qp(P=2 * Q_d + 2 * Q_v, q=q_d + q_v, G=A, h=b, A=matrix(Aeq), b=matrix(beq))
-        PR_sol = sol['x']
+                b[2 * idx - 1] = cur_Box.upper_right_point.x
+                b[2 * idx] = -cur_Box.lower_left_point.x
+                b[2 * idx - 1 + 2 * (t_step - 1) + 1] = cur_Box.upper_right_point.y
+                b[2 * idx + 2 * (t_step - 1) + 1] = -cur_Box.lower_left_point.y
+
+                c_v = c_v + w_v_Ai * np.power(A_ic, 2) + w_v_hi * np.power(h_ic, 2)
+
+            A = np.delete(A, 0, 0)
+            A = np.delete(A, 2 * (t_step - 1), 0)
+
+            b = np.delete(b, 0, 0)
+            b = np.delete(b, 2 * (t_step - 1), 0)
+
+            # np.delete(A,[0 2*(t_step-1)+1],None)
+
+            A = matrix(A)
+            b = matrix(b)
+            Q_v = matrix(Q_v)
+            q_v = matrix(q_v)
+            sol = solvers.qp(P=2 * Q_d + 2 * Q_v, q=q_d + q_v, G=A, h=b, A=matrix(Aeq), b=matrix(beq))
+            cost_list.append(sol['primal objective'] + c_v)
+            sol_list.append(sol['x'])
+
+        PR_sol=sol_list[np.argmin(cost_list)]
         PR_Path = ProposalRays()
         for idx in range(len(PR_sol) / 2 - 1):
             PR = ProposalRay()
@@ -169,7 +191,7 @@ class pathManager:
 
             ts = np.array(self.time_stack) - self.time_stack[-1]
             obs_span = ts[-1] - ts[0]
-            ts = ts / obs_span + 1  # normalize to [0,1]
+            ts = ts / obs_span   # normalize to [0,1]
             # print ts
             # normalize for stablity
             xs = []
@@ -186,12 +208,14 @@ class pathManager:
             py = np.polyfit(ts, ys, 1)
             pz = np.polyfit(ts, zs, 1)
 
+            self.pred_velocity=[px[0]/obs_span, py[0]/obs_span , pz[0]/obs_span]
+            self.predict_start_time=rospy.get_time()
             pred_path = Path()
             pred_path.header.frame_id = "world"
             pred_path.poses = []
             # prediction stack
             for t_eval in np.linspace(0, self.pred_time, self.pred_num):
-                t_eval = t_eval / obs_span + 1
+                t_eval = t_eval / obs_span
                 msg = PoseStamped()
                 msg.pose.position.x = np.polyval(px, t_eval)
                 msg.pose.position.y = np.polyval(py, t_eval)
@@ -209,6 +233,9 @@ class pathManager:
             self.pub.publish(self.predict_stack)
         else:
             rospy.logwarn("not prediction path to publish yet")
+
+
+    def waypoint_publish(self):
 
     def PR_publish(self):
         if self.PR_Path:

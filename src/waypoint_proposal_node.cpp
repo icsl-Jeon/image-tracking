@@ -39,11 +39,11 @@ int main(int argc, char  **argv)
 
     WaypointProposer waypoint_proposer(elev_min,elev_max,N_azim,N_elev,track_d,freebox_min_point,freebox_max_point);
 
-    ros::Rate rate(10.0);
+    ros::Rate rate(5.0);
     while (ros::ok()){
     waypoint_proposer.marker_publish();
-    if (waypoint_proposer.PBs.PB_path.size())
-        waypoint_proposer.PBs_pub.publish(waypoint_proposer.PBs);
+    if (waypoint_proposer.PB_path.PB_path.size())
+        waypoint_proposer.PB_path_pub.publish(waypoint_proposer.PB_path);
     ros::spinOnce();
     rate.sleep();
     }

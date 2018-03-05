@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <launch>
   <arg name="mav_name" default="firefly"/>
-  <arg name="world_name" default="image_tracking"/>
+  <arg name="world_name" default="image_tracking2"/>
   <arg name="enable_logging" default="false" />
   <arg name="enable_ground_truth" default="true" />
   <arg name="log_file" default="$(arg mav_name)" />  
@@ -94,9 +94,9 @@
 	<!-- waypoint proposal -->
   <group ns="waypoint_proposal">
 	<node name="proposer" pkg="image_tracking" type="waypoint_proposal_from_octomap_node" output="screen">
-	<param name="track_d" type="double" value="2.0"/>
+	<param name="track_d" type="double" value="5.0"/>
 	<param name="elev_min" type="double" value="$(eval 3.141592/8.0)"/>
-	<param name="elev_max" type="double" value="$(eval 3.141592/2)"/>
+	<param name="elev_max" type="double" value="$(eval 3.141592/4.0)"/>
 	<param name="N_azim" type="int" value="20"/>
 	<param name="N_elev" type="int" value="12"/>
 	<param name="xy_length_target" type="double" value="0.6"/>

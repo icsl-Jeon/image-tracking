@@ -27,9 +27,9 @@
 #include <image_tracking/Debug.h>
 #include <image_tracking/ProposalBoxes.h>
 #include <image_tracking/ProposalBox.h>
+#include <image_tracking/ProposalBoxPath.h>
 #include <image_tracking/ProposalRay.h>
 #include <image_tracking/ProposalRays.h>
-
 
 
 #include <visualization_msgs/Marker.h>
@@ -92,7 +92,7 @@ class WaypointProposer{
         bool QueryfromTarget( image_tracking::CastQuery::Request&, image_tracking::CastQuery::Response&);
         bool OctreeDebug(image_tracking::Debug::Request& , image_tracking::Debug::Response&);  
         nav_msgs::Path pred_target;  //predicted target path
-        image_tracking::ProposalBoxes PBs; // proposal box path
+        image_tracking::ProposalBoxPath PB_path; // proposal box path
         image_tracking::ProposalRays PRs; //proposal ray path from path manager
         CastSpace cast_space;
         CastSpaceBuffer cast_space_buffer;
@@ -117,13 +117,13 @@ class WaypointProposer{
         ros::Subscriber PRs_sub; //proposed rays from qp solver node
         ros::ServiceServer server_query;
         ros::ServiceServer server_debug;
-        ros::Publisher PBs_pub;
+        ros::Publisher PB_path_pub;
         ros::Publisher marker_pub;
         ros::Publisher boundingCube_pub;
         ros::Publisher yawingArrow_pub;
 
         void marker_publish();
-        void PBs_publish(); //proposal boxes publish
+        void PB_path_publish(); //proposal boxes publish
 
         //Constructor / Destructor
         WaypointProposer(float,float,unsigned int,unsigned int,float,octomap::point3d,octomap::point3d);
