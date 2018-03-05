@@ -21,8 +21,9 @@ class pathManager:
         self.observation_stack_size = observation_stack_size
 
         self.sub = rospy.Subscriber("/gazebo/model_states", ModelStates, self.gazebo_callback)
+        self.sub_PB=rospy.Subscriber("/proposal_box_path",ProposalBoxes,self.PBs_callback)
         self.pub = rospy.Publisher("target_predition_path", nav_msgs.msg.Path)
-        self.pub_PR = rospy.Publisher("proposal_ray_path", ProposalRays)
+        self.pub_PR = rospy.Publisher("/proposal_ray_path", ProposalRays)
 
         self.obs_stack = []  # list of Point of target
         self.time_stack = []
@@ -76,10 +77,11 @@ class pathManager:
             print "fuck,"
         h0 = np.arcsin(h / d)
         A0 = np.arctan2(UAV_position.y - target_position.y, UAV_position.x - target_position.x)
-
+        if A0<0:
+            A0=A0+2*np.pi
         # predicted and proposed aimuth and elevation
 
-        PB_Path = list(msg.PB_Path)
+        PB_Path = list(msg.PB_path)
 
         t_step = len(PB_Path) + 1  # 1(current)+5(prediction)
         # optimzation variables
@@ -116,7 +118,7 @@ class pathManager:
 
         # visibility cost  & visiblity constraint
 
-        w_v = 1.5  # variational cost vs visiblity
+        w_v = 0.8  # variational cost vs visiblity
         Q_v = np.zeros((2 * t_step, 2 * t_step))
         q_v = np.zeros((2 * t_step, 1))
 
@@ -127,7 +129,7 @@ class pathManager:
             cur_Box = PB_Path[idx - 1]
             A_ic = cur_Box.center.x
             h_ic = cur_Box.center.y
-            w_v_Ai = w_v / (cur_Box.upper_right_point.x - cur_Box.lower_left_point.x)
+            w_v_Ai = w_v / (cur_Box.upper_right_point.x - cur_Box.lower_left_point.x)*0.5
             w_v_hi = w_v / (cur_Box.upper_right_point.y - cur_Box.lower_left_point.y)
             Q_v[idx][idx] = w_v_Ai
             Q_v[idx + t_step][idx + t_step] = w_v_hi
@@ -231,4 +233,5 @@ if __name__ == "__main__":
         manager.target_prediction()
 
         manager.pred_publish()
+        manager.PR_publish()
         r.sleep()

@@ -25,12 +25,19 @@
   
 #include <image_tracking/CastQuery.h>
 #include <image_tracking/Debug.h>
+#include <image_tracking/ProposalBoxes.h>
+#include <image_tracking/ProposalBox.h>
+#include <image_tracking/ProposalRay.h>
+#include <image_tracking/ProposalRays.h>
+
+
 
 #include <visualization_msgs/Marker.h>
 #include <geometry_msgs/Point.h>
 
 #include <dbscan.h>
 #include <boxoperator.h>
+
 
 
 #define PI 3.141592
@@ -42,7 +49,6 @@ typedef std::vector<CastSpace> CastSpaceBuffer; // buffer of CastSpace
 
 
 using namespace octomap;
-
 
 
 //this class has info about casted result with clusterd BBs(bounding box)
@@ -86,7 +92,8 @@ class WaypointProposer{
         bool QueryfromTarget( image_tracking::CastQuery::Request&, image_tracking::CastQuery::Response&);
         bool OctreeDebug(image_tracking::Debug::Request& , image_tracking::Debug::Response&);  
         nav_msgs::Path pred_target;  //predicted target path
-
+        image_tracking::ProposalBoxes PBs; // proposal box path
+        image_tracking::ProposalRays PRs; //proposal ray path from path manager
         CastSpace cast_space;
         CastSpaceBuffer cast_space_buffer;
         //Octree 
@@ -107,13 +114,16 @@ class WaypointProposer{
         //ROS 
         ros::Subscriber Octbin_sub;
         ros::Subscriber targetPath_sub;
+        ros::Subscriber PRs_sub; //proposed rays from qp solver node
         ros::ServiceServer server_query;
         ros::ServiceServer server_debug;
+        ros::Publisher PBs_pub;
         ros::Publisher marker_pub;
         ros::Publisher boundingCube_pub;
         ros::Publisher yawingArrow_pub;
 
         void marker_publish();
+        void PBs_publish(); //proposal boxes publish
 
         //Constructor / Destructor
         WaypointProposer(float,float,unsigned int,unsigned int,float,octomap::point3d,octomap::point3d);
@@ -123,7 +133,6 @@ class WaypointProposer{
         CastResult castRayandClustering(geometry_msgs::Point,bool=false);
         // Observation proposal
         ProposedView regionProposal(CastResult,bool=false);
-
         // final processing
         ProposedView viewProposal(geometry_msgs::Point,bool);
 
@@ -133,6 +142,7 @@ class WaypointProposer{
         //callback from octree
         void OctreeCallback(const octomap_msgs::Octomap&); 
         void targetPathCallback(const nav_msgs::Path &);
+        void PRsCallback(const image_tracking::ProposalRays&);
         //for leaf node inspection
         //destructor
 

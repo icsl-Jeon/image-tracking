@@ -151,6 +151,39 @@ geometry_msgs::Transform getPoseFromViewProposal(
     return transform;
 }
 
+
+
+
+geometry_msgs::Transform getPoseFromViewRay(
+        geometry_msgs::Point target_pose,double tracking_distance,image_tracking::ProposalRay ray){
+
+
+
+    double PV_elev=ray.elevation;
+    double PV_azim=ray.azimuth;
+
+
+    geometry_msgs::Transform transform;
+
+    geometry_msgs::Vector3 viewPosition;
+
+    viewPosition.x=target_pose.x+tracking_distance*cos(PV_elev)*cos(PV_azim);
+    viewPosition.y=target_pose.y+tracking_distance*cos(PV_elev)*sin(PV_azim);
+    viewPosition.z=target_pose.z+tracking_distance*sin(PV_elev);
+
+
+    geometry_msgs::Quaternion viewYaw;
+
+    double yaw=PV_azim+PI;
+
+    viewYaw=tf::createQuaternionMsgFromYaw(yaw);
+
+    transform.translation=viewPosition;
+    transform.rotation=viewYaw;
+
+    return transform;
+}
+
 /**
   Waypoint Proposal class
 **/
@@ -172,6 +205,8 @@ this->elev_max=elev_max;
 ros::NodeHandle nh;
 this->targetPath_sub=nh.subscribe("/target_predition_path",1,&WaypointProposer::targetPathCallback,this);
 this->Octbin_sub=nh.subscribe("/octomap_full",3,&WaypointProposer::OctreeCallback,this);
+this->PRs_sub=nh.subscribe("/proposal_ray_path",3,&WaypointProposer::PRsCallback,this);
+this->PBs_pub=nh.advertise<image_tracking::ProposalBoxes>("/proposal_box_path",2);
 this->server_query = nh.advertiseService("cast_query", &WaypointProposer::QueryfromTarget,this);
 this->server_debug = nh.advertiseService("octomap_leaf_debug", &WaypointProposer::OctreeDebug,this);
 
@@ -182,6 +217,7 @@ this->freebox_min_point=min_point;
 this->marker_pub=nh.advertise<visualization_msgs::Marker>("casted_light", 4);
 this->yawingArrow_pub=nh.advertise<visualization_msgs::Marker>("proposed_yawing",4);
 this->boundingCube_pub=nh.advertise<visualization_msgs::Marker>("target_bounding_box",4);
+
 
 //casted light
 
@@ -236,9 +272,45 @@ void WaypointProposer::OctreeCallback(const octomap_msgs::Octomap& msg){
     this->octree_obj=(dynamic_cast<OcTree*>(octree));
 }
 
+// subscribe PRs and publish corresponding marker to draw in Rviz
+void WaypointProposer::PRsCallback(const image_tracking::ProposalRays & PRs){
+    //update PR path
+    this->PRs.Ray_Path=PRs.Ray_Path;
+
+    castedLightMarker.points.clear();
 
 
-// get path, publish Box msg
+    geometry_msgs::PoseStamped cur_pose= this->pred_target.poses[0];
+
+    geometry_msgs::Point target_position;
+    target_position.x=cur_pose.pose.position.x;
+    target_position.y=cur_pose.pose.position.y;
+    target_position.z=cur_pose.pose.position.z;
+
+    //iterate through PV (max=2)
+    for (std::vector<image_tracking::ProposalRay>::iterator it=this->PRs.Ray_Path.begin();it!=this->PRs.Ray_Path.end();it++)
+    {
+
+
+        //this is most important !!!!!!!!!!!!!!
+        geometry_msgs::Transform proposedViewPose=getPoseFromViewRay(target_position,tracking_distance,*it);
+
+        castedLightMarker.points.push_back(target_position);
+
+        geometry_msgs::Point endPoint;
+        endPoint.x=proposedViewPose.translation.x;
+        endPoint.y=proposedViewPose.translation.y;
+        endPoint.z=proposedViewPose.translation.z;
+
+
+        castedLightMarker.points.push_back(endPoint);
+
+    }
+
+}
+
+
+// get path, publish Proposal Boxes (PBs)
 void WaypointProposer::targetPathCallback(const nav_msgs::Path& msg){
     //path update
     this->pred_target=msg;
@@ -248,7 +320,12 @@ void WaypointProposer::targetPathCallback(const nav_msgs::Path& msg){
 
     std::vector<geometry_msgs::PoseStamped>::iterator it;
 
-    castedLightMarker.points.clear();
+    //castedLightMarker.points.clear();
+
+    //clear Boxpath
+
+    image_tracking::ProposalBoxes PBs;
+
 
     //iterator through predicted path
     for(it=target_predicted_poses.begin();it!=target_predicted_poses.end();it++)
@@ -266,8 +343,30 @@ void WaypointProposer::targetPathCallback(const nav_msgs::Path& msg){
 
         // corresponding view proposal
         ProposedView PV=viewProposal(target_position,true);
+
+
         std::cout<<"proposal finished"<<std::endl;
-        if (PV.ProposedBoxes.size()) // if it has proposed view
+
+        // it is not optimal.. we should get rid of Box struct. use ProposalBox
+        image_tracking::ProposalBox cur_PB;
+
+
+
+        cur_PB.lower_left_point.x=PV.ProposedBoxes[0].lower_left_x;
+        cur_PB.lower_left_point.y=PV.ProposedBoxes[0].lower_left_y;
+        cur_PB.upper_right_point.x=PV.ProposedBoxes[0].upper_right_x;
+        cur_PB.upper_right_point.y=PV.ProposedBoxes[0].upper_right_y;
+        cur_PB.center.x=PV.ProposedBoxes[0].center_x;
+        cur_PB.center.y=PV.ProposedBoxes[0].center_y;
+
+
+        // save PBs
+        PBs.PB_path.push_back(cur_PB);
+
+
+        //after proposal, just save the marker.
+        /**
+        if (PV.ProposedBoxes.size()) // if it has proposed view , we plot center ray of PB
             //iterate through PV (max=2)
             for (std::vector<Box>::iterator it=PV.ProposedBoxes.begin();it!=PV.ProposedBoxes.end();it++)
             {
@@ -285,8 +384,11 @@ void WaypointProposer::targetPathCallback(const nav_msgs::Path& msg){
                 castedLightMarker.points.push_back(endPoint);
 
             }
+**/
 
     }
+    //update PBs of proposer
+    this->PBs.PB_path=PBs.PB_path;
 
 }
 
@@ -497,15 +599,20 @@ ProposedView WaypointProposer::viewProposal(geometry_msgs::Point point,bool verb
             //sort in order of large area
             std::sort(proposedview.ProposedBoxes.begin(),proposedview.ProposedBoxes.end());
 
-            for(int i=0;i<proposedview.ProposedBoxes.size();i++)
+            //for(int i=0;i<proposedview.ProposedBoxes.size();i++)
                 //std::cout<<"area: "<<proposedview.ProposedBoxes[i].area<<std::endl;
 
             // keep the beggest two
+
             if (proposedview.ProposedBoxes.size()>1 && proposedview.ProposedBoxes[0].area*0.5<proposedview.ProposedBoxes[1].area)
                 proposedview.ProposedBoxes.erase(proposedview.ProposedBoxes.begin()+2,proposedview.ProposedBoxes.end());
             else
                 proposedview.ProposedBoxes.erase(proposedview.ProposedBoxes.begin()+1,proposedview.ProposedBoxes.end());
 
+
+
+            // keep the biggest for now
+            //proposedview.ProposedBoxes.erase(proposedview.ProposedBoxes.begin()+1,proposedview.ProposedBoxes.end());
 
 
             std::vector<double> azimuth_iter=linspace(float(0),float(2*PI),float(N_azim));

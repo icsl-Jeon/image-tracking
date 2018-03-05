@@ -42,6 +42,8 @@ int main(int argc, char  **argv)
     ros::Rate rate(10.0);
     while (ros::ok()){
     waypoint_proposer.marker_publish();
+    if (waypoint_proposer.PBs.PB_path.size())
+        waypoint_proposer.PBs_pub.publish(waypoint_proposer.PBs);
     ros::spinOnce();
     rate.sleep();
     }
