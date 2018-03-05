@@ -52,8 +52,15 @@ add_service_files(
 	Debug.srv 
 
   )
+add_message_files(
+  FILES
+  ProposalBox.msg
+  ProposalBoxes.msg
+  ProposalRay.msg
+  ProposalRays.msg
 
-generate_messages(DEPENDENCIES geometry_msgs )
+)
+generate_messages(DEPENDENCIES geometry_msgs  )
 
 catkin_package(
   INCLUDE_DIRS include

@@ -12,7 +12,9 @@ int main(int argc, char  **argv)
     double elev_max;
     int N_azim;
     int N_elev;
-
+    double xy_length_target;
+    double z_min_target;
+    double z_max_target;
     // getting parameter from launch file
 
 
@@ -25,9 +27,18 @@ int main(int argc, char  **argv)
     nh_private.param("elev_max",elev_max,PI/2.0);
     nh_private.param("N_azim", N_azim, 10);
     nh_private.param("N_elev",N_elev, 6);
+    nh_private.param("xy_length_target",xy_length_target,1.0);
+    nh_private.param("z_min_target",z_min_target,-0.2);
+    nh_private.param("z_max_target",z_max_target,0.7);
 
 
-    WaypointProposer waypoint_proposer(elev_min,elev_max,N_azim,N_elev,track_d);
+    octomap::point3d freebox_min_point(-xy_length_target/2,-xy_length_target/2,z_min_target);
+    octomap::point3d freebox_max_point(xy_length_target/2,xy_length_target/2,z_max_target);
+
+
+
+    WaypointProposer waypoint_proposer(elev_min,elev_max,N_azim,N_elev,track_d,freebox_min_point,freebox_max_point);
+
     ros::Rate rate(10.0);
     while (ros::ok()){
     waypoint_proposer.marker_publish();

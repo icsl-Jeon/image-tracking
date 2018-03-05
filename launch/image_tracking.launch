@@ -26,10 +26,10 @@
     <arg name="resolution" value="0.1"/>
     <arg name="max_range" value="4.0"/>
     <arg name="height_map" value="true"/>	
-    <arg name="sensor_miss" value="0.2"/>
+    <arg name="sensor_miss" value="0.1"/>
     <arg name="sensor_hit" value="0.9"/>
     <arg name="clamping_min" value="0.12"/>
-    <arg name="clamping_max" value="0.8"/>
+    <arg name="clamping_max" value="0.97"/>
   </include>
   
   
@@ -99,6 +99,9 @@
 	<param name="elev_max" type="double" value="$(eval 3.141592/3)"/>
 	<param name="N_azim" type="int" value="20"/>
 	<param name="N_elev" type="int" value="12"/>
+	<param name="xy_length_target" type="double" value="1.2"/>
+	<param name="z_min_target" type="double" value="-0.5"/>
+	<param name="z_max_target" type="double" value="0.8"/>
 	</node>
   </group>
 

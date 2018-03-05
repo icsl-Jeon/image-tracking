@@ -96,17 +96,27 @@ class WaypointProposer{
         visualization_msgs::Marker yawingMarker;
         std::vector<visualization_msgs::Marker> yawingMarkerList;
 
+        //target 3 dim scale : we need to nullify the octomap around the target
+
+        // 3d box to nullify if target is (0,0,0)
+        octomap::point3d freebox_min_point;
+        octomap::point3d freebox_max_point;
+        visualization_msgs::Marker BBMarker;
+
+
         //ROS 
         ros::Subscriber Octbin_sub;
         ros::Subscriber targetPath_sub;
         ros::ServiceServer server_query;
         ros::ServiceServer server_debug;
         ros::Publisher marker_pub;
+        ros::Publisher boundingCube_pub;
         ros::Publisher yawingArrow_pub;
+
         void marker_publish();
 
         //Constructor / Destructor
-        WaypointProposer(float,float,unsigned int,unsigned int,float);
+        WaypointProposer(float,float,unsigned int,unsigned int,float,octomap::point3d,octomap::point3d);
         ~ WaypointProposer();
                 
         // Ray casting

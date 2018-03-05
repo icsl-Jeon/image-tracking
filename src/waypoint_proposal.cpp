@@ -1,5 +1,5 @@
 #include <waypoint_proposal.h>
-
+#include <octomap/OcTreeIterator.hxx>
 
 /**
   CastResult class
@@ -157,7 +157,8 @@ geometry_msgs::Transform getPoseFromViewProposal(
 
 
 //constructor 
-WaypointProposer::WaypointProposer(float elev_min,float elev_max,unsigned int N_azim,unsigned int N_elev,float track_d)
+WaypointProposer::WaypointProposer(float elev_min,float elev_max,unsigned int N_azim,unsigned int N_elev,float track_d,
+                                   octomap::point3d min_point,octomap::point3d max_point)
 {
 //ROS_INFO("constructor init");
 this->octree_obj=NULL; //fake initialization
@@ -170,15 +171,17 @@ this->elev_max=elev_max;
 
 ros::NodeHandle nh;
 this->targetPath_sub=nh.subscribe("/target_predition_path",1,&WaypointProposer::targetPathCallback,this);
-this->Octbin_sub=nh.subscribe("/octomap_full",10,&WaypointProposer::OctreeCallback,this);
+this->Octbin_sub=nh.subscribe("/octomap_full",3,&WaypointProposer::OctreeCallback,this);
 this->server_query = nh.advertiseService("cast_query", &WaypointProposer::QueryfromTarget,this);
 this->server_debug = nh.advertiseService("octomap_leaf_debug", &WaypointProposer::OctreeDebug,this);
 
+this->freebox_max_point=max_point;
+this->freebox_min_point=min_point;
 
 
-this->marker_pub=nh.advertise<visualization_msgs::Marker>("casted_light", 10);
-this->yawingArrow_pub=nh.advertise<visualization_msgs::Marker>("proposed_yawing",10);
-
+this->marker_pub=nh.advertise<visualization_msgs::Marker>("casted_light", 4);
+this->yawingArrow_pub=nh.advertise<visualization_msgs::Marker>("proposed_yawing",4);
+this->boundingCube_pub=nh.advertise<visualization_msgs::Marker>("target_bounding_box",4);
 
 //casted light
 
@@ -190,9 +193,31 @@ castedLightMarker.pose.orientation.w = 1.0;
 castedLightMarker.id = 0;
 castedLightMarker.type = visualization_msgs::Marker::LINE_LIST;
 castedLightMarker.scale.x = 0.05;
-castedLightMarker.color.b = 1;
+castedLightMarker.color.g = 1;
 castedLightMarker.color.a = 0.5;
    
+
+
+
+// Bounded Box around target
+BBMarker.header.frame_id="world";
+BBMarker.header.stamp=ros::Time::now();
+BBMarker.ns="targetBB";
+BBMarker.action=visualization_msgs::Marker::ADD;
+BBMarker.id=0;
+BBMarker.type=visualization_msgs::Marker::CUBE;
+
+BBMarker.pose.orientation.x = 0.0;
+BBMarker.pose.orientation.y = 0.0;
+BBMarker.pose.orientation.z = 0.0;
+BBMarker.pose.orientation.w = 1.0;
+
+BBMarker.scale.x = this->freebox_max_point.x()-this->freebox_min_point.x();
+BBMarker.scale.y = BBMarker.scale.x;
+BBMarker.scale.z=this->freebox_max_point.z()-this->freebox_min_point.z();
+
+BBMarker.color.r=1.0;
+BBMarker.color.a=0.2;
 
 
 
@@ -212,12 +237,58 @@ void WaypointProposer::OctreeCallback(const octomap_msgs::Octomap& msg){
 }
 
 
+
+// get path, publish Box msg
 void WaypointProposer::targetPathCallback(const nav_msgs::Path& msg){
     //path update
     this->pred_target=msg;
 
-}
 
+    std::vector<geometry_msgs::PoseStamped> target_predicted_poses=this->pred_target.poses;
+
+    std::vector<geometry_msgs::PoseStamped>::iterator it;
+
+    castedLightMarker.points.clear();
+
+    //iterator through predicted path
+    for(it=target_predicted_poses.begin();it!=target_predicted_poses.end();it++)
+    {
+        // current target position
+        geometry_msgs::Point target_position;
+        target_position.x=it->pose.position.x;
+        target_position.y=it->pose.position.y;
+        target_position.z=it->pose.position.z;
+
+        this->BBMarker.pose.position.x=target_position.x;
+        this->BBMarker.pose.position.y=target_position.y;
+        this->BBMarker.pose.position.z=target_position.z+(this->freebox_max_point.z()+this->freebox_min_point.z())/2.0;
+
+
+        // corresponding view proposal
+        ProposedView PV=viewProposal(target_position,true);
+        std::cout<<"proposal finished"<<std::endl;
+        if (PV.ProposedBoxes.size()) // if it has proposed view
+            //iterate through PV (max=2)
+            for (std::vector<Box>::iterator it=PV.ProposedBoxes.begin();it!=PV.ProposedBoxes.end();it++)
+            {
+
+                geometry_msgs::Transform proposedViewPose=getPoseFromViewProposal(target_position,tracking_distance,*it);
+
+                castedLightMarker.points.push_back(target_position);
+
+                geometry_msgs::Point endPoint;
+                endPoint.x=proposedViewPose.translation.x;
+                endPoint.y=proposedViewPose.translation.y;
+                endPoint.z=proposedViewPose.translation.z;
+
+
+                castedLightMarker.points.push_back(endPoint);
+
+            }
+
+    }
+
+}
 
 
 
@@ -238,8 +309,18 @@ CastResult WaypointProposer::castRayandClustering(geometry_msgs::Point query_poi
         point3d light_end; //will not be used
         point3d light_start(query_point.x,query_point.y,query_point.z);
 
+
         
 
+        //nullify octomap around target
+
+        double thresMin = octree_obj->getClampingThresMin();
+
+
+        for(OcTree::leaf_bbx_iterator it = octree_obj->begin_leafs_bbx(freebox_min_point+light_start,freebox_max_point+light_start),
+            end=octree_obj->end_leafs_bbx(); it!= end; ++it)
+              it->setLogOdds(octomap::logodds(thresMin));
+        octree_obj->updateInnerOccupancy();
 
         // ray casting 
         for (int ind_elev=0;ind_elev<N_elev; ind_elev++)
@@ -253,7 +334,8 @@ CastResult WaypointProposer::castRayandClustering(geometry_msgs::Point query_poi
                   tracking_distance*sin(elevation_iter[ind_elev]));
                  
                 // 1 : invisible 0 : visible
-                castresult.mat[ind_elev][ind_azim]= octree_obj->castRay(light_start,light_dir,light_end,ignoreUnknownCells,5.0);
+
+                castresult.mat[ind_elev][ind_azim]= octree_obj->castRay(light_start,light_dir,light_end,ignoreUnknownCells,tracking_distance);
 
 
                 // for visible castspace, we need to cluster them
@@ -332,11 +414,14 @@ CastResult WaypointProposer::castRayandClustering(geometry_msgs::Point query_poi
 ProposedView WaypointProposer::regionProposal(CastResult castResult,bool verbose)
 {
     ProposedView proposedView;
+
     // here box denote real coordinate
     int minPnts=6; //minimum number of cluster
     int count=0;
     //iterate through clusters
-    for(std::vector<Box>::iterator it=castResult.clusterBB.begin();
+    if(castResult.clusterBB.size())
+     {
+        for(std::vector<Box>::iterator it=castResult.clusterBB.begin();
          it!=castResult.clusterBB.end();it++,count++)
         if(castResult.clusterNvec[count]>=minPnts)
         {
@@ -374,7 +459,13 @@ ProposedView WaypointProposer::regionProposal(CastResult castResult,bool verbose
     if (verbose)
         proposedView.printProposedView(castResult);
 
+
+
+    }
+    else
+        ROS_WARN("no region to proposal.");
     return proposedView;
+
 }
 
 
@@ -389,7 +480,6 @@ ProposedView WaypointProposer::viewProposal(geometry_msgs::Point point,bool verb
 
     {
 
-
         // perform raycast and clustering
 
 
@@ -397,70 +487,72 @@ ProposedView WaypointProposer::viewProposal(geometry_msgs::Point point,bool verb
         std::cout<<"---------------------------"<<std::endl;
         ProposedView proposedview=regionProposal(castresult,verbose); //it has view proposal more than two and it is index space
 
-
-
-        // after that, just pick two and convert to real space
-
-
-        //std::cout<<"total number of proposed box: "<<proposedview.ProposedBoxes.size()<<std::endl;
-
-        //sort in order of large area
-        std::sort(proposedview.ProposedBoxes.begin(),proposedview.ProposedBoxes.end());
-
-        for(int i=0;i<proposedview.ProposedBoxes.size();i++)
-            std::cout<<"area: "<<proposedview.ProposedBoxes[i].area<<std::endl;
-
-        // keep the beggest two
-        if (proposedview.ProposedBoxes.size()>1 && proposedview.ProposedBoxes[0].area*0.5<proposedview.ProposedBoxes[1].area)
-            proposedview.ProposedBoxes.erase(proposedview.ProposedBoxes.begin()+2,proposedview.ProposedBoxes.end());
-        else
-            proposedview.ProposedBoxes.erase(proposedview.ProposedBoxes.begin()+1,proposedview.ProposedBoxes.end());
-
-
-
-        std::vector<double> azimuth_iter=linspace(float(0),float(2*PI),float(N_azim));
-        std::vector<double> elevation_iter=linspace(float(elev_min),float(elev_max),float(N_elev));
-
-
-        // castRay from light source to proposoed view angle (max # = 2)
-        std::vector<Box>  &PV=proposedview.ProposedBoxes;
-        for (std::vector<Box>::iterator it=PV.begin();it!=PV.end();it++)
+        if(proposedview.ProposedBoxes.size())
         {
+            // after that, just pick two and convert to real space
 
 
-            //proposed view point(= center of box)
-            double PV_azim=(azimuth_iter[it->upper_right_y]+azimuth_iter[it->lower_left_y])/2;
-            double PV_elev=(elevation_iter[it->lower_left_x]+elevation_iter[it->upper_right_x])/2;
+            //std::cout<<"total number of proposed box: "<<proposedview.ProposedBoxes.size()<<std::endl;
+
+            //sort in order of large area
+            std::sort(proposedview.ProposedBoxes.begin(),proposedview.ProposedBoxes.end());
+
+            for(int i=0;i<proposedview.ProposedBoxes.size();i++)
+                //std::cout<<"area: "<<proposedview.ProposedBoxes[i].area<<std::endl;
+
+            // keep the beggest two
+            if (proposedview.ProposedBoxes.size()>1 && proposedview.ProposedBoxes[0].area*0.5<proposedview.ProposedBoxes[1].area)
+                proposedview.ProposedBoxes.erase(proposedview.ProposedBoxes.begin()+2,proposedview.ProposedBoxes.end());
+            else
+                proposedview.ProposedBoxes.erase(proposedview.ProposedBoxes.begin()+1,proposedview.ProposedBoxes.end());
 
 
-            it->center_x=PV_azim;
-            it->center_y=PV_elev;
+
+            std::vector<double> azimuth_iter=linspace(float(0),float(2*PI),float(N_azim));
+            std::vector<double> elevation_iter=linspace(float(elev_min),float(elev_max),float(N_elev));
 
 
-            //now convert to real physical value
+            // castRay from light source to proposoed view angle (max # = 2)
+            std::vector<Box>  &PV=proposedview.ProposedBoxes;
+            for (std::vector<Box>::iterator it=PV.begin();it!=PV.end();it++)
+            {
 
-            int idx_lower_left_x=it->lower_left_x;
-            int idx_lower_left_y=it->lower_left_y;
-            int idx_upper_right_x=it->upper_right_x;
-            int idx_upper_right_y=it->upper_right_y;
 
-            it->lower_left_x=azimuth_iter[idx_lower_left_y];
-            it->lower_left_y=elevation_iter[idx_upper_right_x];
-            it->upper_right_x=azimuth_iter[idx_upper_right_y];
-            it->upper_right_y=elevation_iter[idx_lower_left_x];
+                //proposed view point(= center of box)
+                double PV_azim=(azimuth_iter[it->upper_right_y]+azimuth_iter[it->lower_left_y])/2;
+                double PV_elev=(elevation_iter[it->lower_left_x]+elevation_iter[it->upper_right_x])/2;
 
-            /**
-            std::cout<<"proposed center: ["<<PV_azim<<" , "<<PV_elev<<"]"<<std::endl;
 
-            std::cout<<"lower left: ["<<it->lower_left_x<<" , "<<it->lower_left_y<<"]"<<std::endl;
-            std::cout<<"upper_right: ["<< it->upper_right_x<<" , "<<it->upper_right_y<<"]"<<std::endl;
-            **/
+                it->center_x=PV_azim;
+                it->center_y=PV_elev;
+
+
+                //now convert to real physical value
+
+                int idx_lower_left_x=it->lower_left_x;
+                int idx_lower_left_y=it->lower_left_y;
+                int idx_upper_right_x=it->upper_right_x;
+                int idx_upper_right_y=it->upper_right_y;
+
+                it->lower_left_x=azimuth_iter[idx_lower_left_y];
+                it->lower_left_y=elevation_iter[idx_upper_right_x];
+                it->upper_right_x=azimuth_iter[idx_upper_right_y];
+                it->upper_right_y=elevation_iter[idx_lower_left_x];
+
+                /**
+                std::cout<<"proposed center: ["<<PV_azim<<" , "<<PV_elev<<"]"<<std::endl;
+
+                std::cout<<"lower left: ["<<it->lower_left_x<<" , "<<it->lower_left_y<<"]"<<std::endl;
+                std::cout<<"upper_right: ["<< it->upper_right_x<<" , "<<it->upper_right_y<<"]"<<std::endl;
+                **/
+            }
+
+
 
 
         }
 
         return proposedview;
-
 
     }
     else
@@ -586,6 +678,8 @@ void WaypointProposer::marker_publish(){
         for (std::vector<visualization_msgs::Marker>::iterator it=yawingMarkerList.begin();
              it!=yawingMarkerList.end();it++)
          yawingArrow_pub.publish(*it);
+
+    this->boundingCube_pub.publish(this->BBMarker);
 
 }
 
