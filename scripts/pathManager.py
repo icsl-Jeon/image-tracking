@@ -134,6 +134,8 @@ class pathManager:
 
         # variation cost
 
+        w_v0=2# special care for initial variation
+
         Q_d_tmp[0][0] = 1
         Q_d_tmp[-1][-1] = 1
         for idx in range(t_step - 2):
@@ -149,6 +151,13 @@ class pathManager:
         Q_d[np.ix_(range(0, t_step), range(0, t_step))] = Q_d_tmp
         Q_d[np.ix_(range(t_step, 2 * t_step), range(t_step, 2 * t_step))] = Q_d_tmp
 
+        # weight for initial variation
+        for i in [0, t_step]:
+            Q_d[i][i] = w_v0
+            Q_d[i][i + 1] = -w_v0
+            Q_d[i + 1][i] = -w_v0
+            Q_d[i + 1][i + 1] = w_v0 + 1
+
         Q_d = matrix(Q_d)
         q_d = matrix(np.zeros((2 * t_step, 1)))
 
@@ -163,7 +172,7 @@ class pathManager:
         candidate_BoxPath = list(itertools.product(*list_))
 
 
-        w_v = 0.3  # variational cost vs visiblity
+        w_v = 0.4  # variational cost vs visiblity
         cost_list = []
         sol_list = []
         for cur_PB_Path in candidate_BoxPath:
@@ -327,7 +336,7 @@ if __name__ == "__main__":
     tracking_distance=3
     manager = pathManager(target_name, 0.05, observation_stack_size, pred_time, pred_num,tracking_distance)
 
-    r = rospy.Rate(10)  # 10hz
+    r = rospy.Rate(20)  # 10hz
     while not rospy.is_shutdown():
         manager.target_prediction()
 

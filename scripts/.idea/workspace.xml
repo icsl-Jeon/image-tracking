@@ -14,8 +14,8 @@
       <file leaf-file-name="pathManager.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/pathManager.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="556">
-              <caret line="143" column="38" lean-forward="true" selection-start-line="143" selection-start-column="38" selection-end-line="143" selection-end-column="38" />
+            <state relative-caret-position="607">
+              <caret line="338" column="21" lean-forward="false" selection-start-line="338" selection-start-column="21" selection-end-line="338" selection-end-column="21" />
               <folding>
                 <element signature="e#41#53#0" expanded="true" />
               </folding>
@@ -440,8 +440,8 @@
     <entry file="file://$PROJECT_DIR$/np" />
     <entry file="file://$PROJECT_DIR$/pathManager.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="556">
-          <caret line="143" column="38" lean-forward="true" selection-start-line="143" selection-start-column="38" selection-end-line="143" selection-end-column="38" />
+        <state relative-caret-position="607">
+          <caret line="338" column="21" lean-forward="false" selection-start-line="338" selection-start-column="21" selection-end-line="338" selection-end-column="21" />
           <folding>
             <element signature="e#41#53#0" expanded="true" />
           </folding>
