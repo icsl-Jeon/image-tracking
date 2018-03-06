@@ -7,8 +7,13 @@ import itertools
 from gazebo_msgs.msg import ModelStates
 from geometry_msgs.msg import Pose
 from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Transform
+from geometry_msgs.msg import Quaternion
 from nav_msgs.msg import Path
+from trajectory_msgs.msg import MultiDOFJointTrajectory
+from trajectory_msgs.msg import MultiDOFJointTrajectoryPoint
 
+from tf import transformations
 from cvxopt import matrix, solvers
 from image_tracking.msg import ProposalBox
 from image_tracking.msg import ProposalBoxes
@@ -17,7 +22,7 @@ from image_tracking.msg import ProposalRay
 from image_tracking.msg import ProposalBoxPath
 
 class pathManager:
-    def __init__(self, target_name, observation_rate, observation_stack_size, pred_time, pred_num):
+    def __init__(self, target_name, observation_rate, observation_stack_size, pred_time, pred_num,tracking_distance):
         self.target_name = target_name
         self.observation_stack_size = observation_stack_size
 
@@ -25,6 +30,7 @@ class pathManager:
         self.sub_PB=rospy.Subscriber("/proposal_box_path",ProposalBoxPath,self.PBs_callback)
         self.pub = rospy.Publisher("target_predition_path", nav_msgs.msg.Path)
         self.pub_PR = rospy.Publisher("/proposal_ray_path", ProposalRays)
+        self.pub_waypoint=rospy.Publisher("/firefly/command/trajectory",MultiDOFJointTrajectory)
 
         self.obs_stack = []  # list of Point of target
         self.time_stack = []
@@ -35,8 +41,39 @@ class pathManager:
         self.pred_num = pred_num  # how many predict
         self.obsservation_rate = observation_rate
         self.UAV_pose = Pose()
-        self.pred_velocity=[]  # poly 1th coefficient of x,y,z
         self.PR_Path = ProposalRays()
+        self.tracking_distance=tracking_distance # actual tracking. not just virtual ray
+
+
+    # 0th axis = azim
+    # 1th axis = elev
+    def get_PR_Path_matrix(self):
+        azim_Path=[]
+        elev_Path=[]
+        for ray in list(self.PR_Path.Ray_Path):
+            azim_Path.append(ray.azimuth)
+            elev_Path.append(ray.elevation)
+
+        return np.stack((np.array(azim_Path),np.array(elev_Path)))
+
+    # 0th axis = xs
+    # 1th axis = ys
+    # 2th axis = zs
+    def get_position_Path_matrix(self):
+        x_Path=[]
+        y_Path=[]
+        z_Path=[]
+
+        for pose in list(self.predict_stack.poses):
+            x_Path.append(pose.pose.position.x)
+            y_Path.append(pose.pose.position.y)
+            z_Path.append(pose.pose.position.z)
+
+        return np.array([x_Path,y_Path,z_Path])
+
+
+    def get_waypoint_from_position_ray(self,x,y,z,azim,elev):
+        return np.array([x+self.tracking_distance*np.cos(elev)*np.cos(azim),y+self.tracking_distance*np.cos(elev)*np.sin(azim),z+self.tracking_distance*np.sin(elev)])
 
     def gazebo_callback(self, msg):
 
@@ -126,7 +163,7 @@ class pathManager:
         candidate_BoxPath = list(itertools.product(*list_))
 
 
-        w_v = 0.5  # variational cost vs visiblity
+        w_v = 0.3  # variational cost vs visiblity
         cost_list = []
         sol_list = []
         for cur_PB_Path in candidate_BoxPath:
@@ -208,7 +245,7 @@ class pathManager:
             py = np.polyfit(ts, ys, 1)
             pz = np.polyfit(ts, zs, 1)
 
-            self.pred_velocity=[px[0]/obs_span, py[0]/obs_span , pz[0]/obs_span]
+
             self.predict_start_time=rospy.get_time()
             pred_path = Path()
             pred_path.header.frame_id = "world"
@@ -236,6 +273,42 @@ class pathManager:
 
 
     def waypoint_publish(self):
+        t_eval=rospy.get_time()-self.predict_start_time
+        ts_sampled=np.linspace(0,self.pred_time,self.pred_num)
+        ray_sampled=self.get_PR_Path_matrix()
+        azim_sampled=ray_sampled[0]
+        elev_sampled=ray_sampled[1]
+
+        position_sampled=self.get_position_Path_matrix()
+        if not (azim_sampled)==None:
+            if (len(position_sampled[0]) == self.pred_num ) &(len(azim_sampled) ==self.pred_num ):
+                interp_y=np.interp(t_eval,ts_sampled,position_sampled[1])
+                interp_z=np.interp(t_eval,ts_sampled,position_sampled[2])
+                interp_x=np.interp(t_eval,ts_sampled,position_sampled[0])
+
+                interp_azim = np.interp(t_eval, ts_sampled, azim_sampled)
+                interp_elev = np.interp(t_eval, ts_sampled, elev_sampled)
+
+                desired_position=self.get_waypoint_from_position_ray(interp_x,interp_y,interp_z,interp_azim,interp_elev)
+                desired_yaw=interp_azim+np.pi
+
+
+                desired_pose = Transform()
+                desired_pose.translation.x=desired_position[0]
+                desired_pose.translation.y=desired_position[1]
+                desired_pose.translation.z=desired_position[2]
+
+                desired_pose.rotation=Quaternion(*transformations.quaternion_about_axis(desired_yaw,[0,0,1]))
+
+                traj_point=MultiDOFJointTrajectoryPoint()
+                traj_point.transforms.append(desired_pose)
+
+                traj_msg=MultiDOFJointTrajectory()
+                traj_msg.points.append(traj_point)
+
+
+                self.pub_waypoint.publish(traj_msg)
+
 
     def PR_publish(self):
         if self.PR_Path:
@@ -244,7 +317,6 @@ class pathManager:
         else:
             rospy.logwarn("not proposal ray path to publish yet")
 
-
 if __name__ == "__main__":
 
     rospy.init_node('path_manager')
@@ -252,8 +324,8 @@ if __name__ == "__main__":
     observation_stack_size = 5
     pred_time = 3  # prediction horizon
     pred_num = 5  # not that important ...
-
-    manager = pathManager(target_name, 0.05, observation_stack_size, pred_time, pred_num)
+    tracking_distance=3
+    manager = pathManager(target_name, 0.05, observation_stack_size, pred_time, pred_num,tracking_distance)
 
     r = rospy.Rate(10)  # 10hz
     while not rospy.is_shutdown():
@@ -261,4 +333,5 @@ if __name__ == "__main__":
 
         manager.pred_publish()
         manager.PR_publish()
+        manager.waypoint_publish()
         r.sleep()

@@ -73,10 +73,10 @@
     
     
     <!--keyboard interface -->
-    <node name="waypoint_publisher_from_key" pkg="image_tracking" type="waypoint_publisher_from_key" output="screen"/>
+    <!--node name="waypoint_publisher_from_key" pkg="image_tracking" type="waypoint_publisher_from_key" output="screen"/>
 
     <node name="keypress_interface" pkg="image_tracking" type="keypress.py" output="screen" launch-prefix="xterm -e"/>
-
+-->
 	<!--state_publisher-->
     <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
     <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
