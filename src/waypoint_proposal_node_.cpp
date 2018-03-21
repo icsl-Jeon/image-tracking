@@ -42,7 +42,7 @@ int main(int argc, char  **argv)
     WaypointProposer waypoint_proposer(elev_min,elev_max,N_azim,N_elev,track_d,freebox_min_point,freebox_max_point,nh_private);
 
     ROS_INFO("proposer started");
-    ros::Rate rate(20);
+    ros::Rate rate(10);
 
     // hovering first
 

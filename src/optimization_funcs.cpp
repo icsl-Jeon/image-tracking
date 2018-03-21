@@ -59,7 +59,7 @@ double obj_fun(unsigned n, const double *x, double *grad, void *param_info)
                                                     (elev-elev_min)/norm_length_elev);
 
     double visibility_cost=0;
-    double decaying_factor=0.1; //bigger = smoother
+    double decaying_factor=0.2; //bigger = smoother
     // we translate the potential field along [-1 0 1] to consider periodic effect
     Eigen::Vector3d field_translate(-1,0,1);
 
@@ -144,8 +144,6 @@ double nonlcon_PWL(unsigned n, const double* x, double* grad, void* param_info)
     if(elev_lower_idx>=N_elev-1)
         elev_lower_idx=N_elev-2;
     int elev_upper_idx=elev_lower_idx+1;
-
-    std::cout<<"current lower index azim: "<<azim_lower_idx<<" elev: "<<elev_lower_idx<<std::endl;
 
 
     double azim_lower=azim_set[azim_lower_idx], azim_upper=azim_set[azim_upper_idx];

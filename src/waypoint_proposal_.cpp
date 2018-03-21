@@ -310,13 +310,13 @@ void  WaypointProposer::viewProposal(){
     ub.push_back(+param_.elev_max-1e-5);
 
 
-    nlopt::opt opt(nlopt::LD_MMA,3);
+    nlopt::opt opt(nlopt::LD_SLSQP,3);
 
     opt.set_min_objective(obj_fun,&param_);
     opt.set_upper_bounds(ub);
     opt.set_lower_bounds(lb);
-    opt.add_inequality_constraint(nonlcon_PWL,&param_,1e-8);
-    opt.set_xtol_rel(1e-2);
+    opt.add_inequality_constraint(nonlcon_PWL,&param_,1e-4);
+    opt.set_xtol_rel(1e-4);
     auto begin = std::chrono::high_resolution_clock::now();
     double minf;
     int result =opt.optimize(x,minf);
