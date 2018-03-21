@@ -33,24 +33,6 @@
   </include>
   
   
-  <!-- target spawn -->
-  <group ns ="target">
-  <include file="$(find turtlebot_gazebo)/launch/includes/kobuki.launch.xml">
-    <arg name="base" value="kobuki"/>
-    <arg name="stacks" value="hexagons"/>
-    <arg name="robot_name" value="target"/>	 
-    <arg name="3d_sensor" value="kinect"/>
-    <arg name="init_pose" value="-x 2.5 -y 0.5"/>
-  </include>
-  
-  	<!-- keyboard control-->
-  <node pkg="turtlebot_teleop" type="turtlebot_teleop_key" name="turtlebot_teleop_keyboard"  output="screen" launch-prefix="xterm -e">
-    <param name="scale_linear" value="0.5" type="double"/>
-    <param name="scale_angular" value="1.5" type="double"/>
-    <remap from="turtlebot_teleop_keyboard/cmd_vel" to="cmd_vel_mux/input/teleop"/>
-  </node>
-  
-  </group>
   
   <!-- setting tf a fixed frame to base tf -->
   
@@ -73,10 +55,10 @@
     
     
     <!--keyboard interface -->
-    <!--node name="waypoint_publisher_from_key" pkg="image_tracking" type="waypoint_publisher_from_key" output="screen"/>
+    <node name="waypoint_publisher_from_key" pkg="image_tracking" type="waypoint_publisher_from_key" output="screen"/>
 
     <node name="keypress_interface" pkg="image_tracking" type="keypress.py" output="screen" launch-prefix="xterm -e"/>
--->
+
 	<!--state_publisher-->
     <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
     <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
@@ -91,25 +73,10 @@
 
   </group>
 
-	<!-- waypoint proposal -->
-  <group ns="waypoint_proposal">
-	<node name="proposer" pkg="image_tracking" type="waypoint_proposal_from_octomap_node" output="screen">
-	<param name="track_d" type="double" value="5.0"/>
-	<param name="elev_min" type="double" value="$(eval 3.141592/8.0)"/>
-	<param name="elev_max" type="double" value="$(eval 3.141592/4.0)"/>
-	<param name="N_azim" type="int" value="20"/>
-	<param name="N_elev" type="int" value="12"/>
-	<param name="xy_length_target" type="double" value="0.6"/>
-	<param name="z_min_target" type="double" value="-0.5"/>
-	<param name="z_max_target" type="double" value="0.8"/>
-	<param name="target_name" type="string" value="target"/>
-	<param name="tracker_name" type="string" value="$(arg mav_name)"/>
-	<param name="w_v" type="double" value="0.2"/> <!--visibility cost weight-->
-	<param name="w_d" type="double" value="1"/> <!--tracking_distance cost weight-->
-	</node>
-  </group>
+<!--rviz-->
+  <node name="rviz" pkg="rviz" type="rviz" args="args=-d $(find image_tracking)/rviz/octomap_demo.rviz"/>
 
-  <!--rviz-->
-  <node name="rviz" pkg="rviz" type="rviz" args="args=-d $(find image_tracking)/rviz/image_tracking.rviz"/>
+
+
 
 </launch>

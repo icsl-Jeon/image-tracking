@@ -1,4 +1,8 @@
-#include <waypoint_proposal.h>
+//
+// Created by jbs on 18. 3. 19.
+//
+
+#include <waypoint_proposal_.h>
 
 /** usage
  * arg : tracking_d elev_min N_azim N_elev
@@ -20,7 +24,6 @@ int main(int argc, char  **argv)
 
 
     ros::init(argc, argv, "waypoint_proposal_node");
-
     ros::NodeHandle nh_private("~");
     nh_private.param("track_d", track_d, 2.0);
     nh_private.param("elev_min", elev_min, PI/6.0);
@@ -36,16 +39,26 @@ int main(int argc, char  **argv)
     octomap::point3d freebox_max_point(xy_length_target/2,xy_length_target/2,z_max_target);
 
 
+    WaypointProposer waypoint_proposer(elev_min,elev_max,N_azim,N_elev,track_d,freebox_min_point,freebox_max_point,nh_private);
 
-    WaypointProposer waypoint_proposer(elev_min,elev_max,N_azim,N_elev,track_d,freebox_min_point,freebox_max_point);
+    ROS_INFO("proposer started");
+    ros::Rate rate(20);
 
-    ros::Rate rate(5.0);
+    // hovering first
+
+    ros::Duration(3.0).sleep();
+
     while (ros::ok()){
-    waypoint_proposer.marker_publish();
-    if (waypoint_proposer.PB_path.PB_path.size())
-        waypoint_proposer.PB_path_pub.publish(waypoint_proposer.PB_path);
-    ros::spinOnce();
-    rate.sleep();
+
+        if (waypoint_proposer.octomap_callback_flag && waypoint_proposer.state_callback_flag)
+        {
+            waypoint_proposer.viewProposal(); //update Marker & waypoint
+            waypoint_proposer.marker_publish();
+        } //publish waypoint ray and BBMarker
+        waypoint_proposer.waypoint_publish();
+
+        ros::spinOnce();
+        rate.sleep();
     }
     return 0;
 

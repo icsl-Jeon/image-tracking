@@ -85,13 +85,12 @@ target_link_libraries(waypoint_publisher_from_key ${catkin_LIBRARIES})
 add_dependencies(waypoint_publisher_from_key ${catkin_EXPORTED_TARGETS})
 
 
-add_executable(waypoint_proposal_from_octomap_node src/waypoint_proposal_node.cpp src/waypoint_proposal.cpp)
-target_link_libraries(waypoint_proposal_from_octomap_node ${catkin_LIBRARIES} )
+add_executable(waypoint_proposal_from_octomap_node src/waypoint_proposal_node_.cpp src/waypoint_proposal_.cpp src/optimization_funcs.cpp)
+target_link_libraries(waypoint_proposal_from_octomap_node ${catkin_LIBRARIES} nlopt)
 add_dependencies(waypoint_proposal_from_octomap_node  ${catkin_EXPORTED_TARGETS})
 
 
 find_package(octomap REQUIRED)
 include_directories(${OCTOMAP_INCLUDE_DIRS})
 link_libraries(${OCTOMAP_LIBRARIES})
-
 
