@@ -279,9 +279,9 @@ void  WaypointProposer::viewProposal(){
 
     // clamp the elev_cur for warm start
     if (elev_cur<elev_min)
-        elev_cur=elev_min+1e-4;
+        elev_cur=elev_min+1e-6;
     if (elev_cur>elev_max)
-        elev_cur=elev_max-1e-4;
+        elev_cur=elev_max-1e-6;
 
     double azim_cur=atan2(-param_.target_position[1]+param_.tracker_position[1],
                           -param_.target_position[0]+param_.tracker_position[0]);
@@ -289,7 +289,10 @@ void  WaypointProposer::viewProposal(){
         azim_cur+=2*Pi;
 
     double r_cur=(param_.target_position-param_.tracker_position).norm();
-
+    if (r_cur<=3)
+        r_cur=3+1e-6;
+    if(r_cur>=6)
+        r_cur=6-1e-6;
     printf("------------------------------- \n");
     printf("initial r: %f azim %f elev %f\n",r_cur,azim_cur,elev_cur);
 
@@ -298,47 +301,85 @@ void  WaypointProposer::viewProposal(){
     x.push_back(r_cur);
     x.push_back(azim_cur);
     x.push_back(elev_cur);
+    std::vector<double> cur_x=x;
+    std::vector<double> min_x=x;
+
+    double min_cost=1000;
 
     std::vector<double> lb;
-    lb.push_back(2);
-    lb.push_back(-HUGE_VAL);
-    lb.push_back(param_.elev_min+1e-5);
+    lb.push_back(3);
+    lb.push_back(0);
+    lb.push_back(param_.elev_min);
 
     std::vector<double> ub;
-    ub.push_back(+HUGE_VAL);
-    ub.push_back(+HUGE_VAL);
-    ub.push_back(+param_.elev_max-1e-5);
+    ub.push_back(6);
+    ub.push_back(2*Pi);
+    ub.push_back(param_.elev_max);
 
 
     nlopt::opt opt(nlopt::LD_SLSQP,3);
 
+    std::vector<double> step_sizes;
+    double step_size=1e-6;
+    step_sizes.push_back(step_size);
+    step_sizes.push_back(step_size);
+    step_sizes.push_back(step_size);
+
+
+    opt.set_initial_step(step_sizes);
     opt.set_min_objective(obj_fun,&param_);
     opt.set_upper_bounds(ub);
     opt.set_lower_bounds(lb);
-    opt.add_inequality_constraint(nonlcon_PWL,&param_,1e-4);
-    opt.set_xtol_rel(1e-4);
+    opt.set_xtol_rel(1e-2);
     auto begin = std::chrono::high_resolution_clock::now();
     double minf;
-    int result =opt.optimize(x,minf);
-    ROS_INFO("optimization completed");
 
-    if ( result< 0) {
-        printf("nlopt failed! reason:%d",opt.optimize(x,minf));
-    }
-    else {
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed  = (end - begin);
-        printf("found minimum at f(%g,%g,%g) = %0.10g\n", x[0], x[1],x[2], minf);
-    }
+    Eigen::Vector3d rand_scale(0.1,Pi/16,Pi/10);
 
+//    int count=0;
+//    while(count<10) {
+//        count++;
+//        //perturb little bit
+//        for (int i=0;i<3;i++) {
+//            x[i] = cur_x[i]+(-rand_scale[i] + static_cast <double> (std::rand()) /( static_cast <double> (RAND_MAX/(2*rand_scale[i]))));
+//            if(x[i]<lb[i])
+//                x[i]=lb[i]+1e-4;
+//            if(x[i]>ub[i])
+//                x[i]=ub[i]-1e-4;
+//        }
+//
+//
+//        int result = opt.optimize(x, minf);
+//
+//        if(min_cost>minf)
+//        {
+//            min_cost=minf;
+//            min_x=x;
+//        }
+//
+//        ROS_INFO("optimization completed");
+//
+//        if (result < 0) {
+//            printf("nlopt failed! reason:%d", result);
+//        } else {
+//            auto end = std::chrono::high_resolution_clock::now();
+//            std::chrono::duration<double> elapsed = (end - begin);
+//            printf("found minimum at f(%g,%g,%g) = %0.10g\n", x[0], x[1], x[2], minf);
+//        }
+//    }
+//
+    int result = opt.optimize(x, minf);
 
+    printf("found minimum at f(%g,%g,%g) = %0.10g\n", x[0], x[1], x[2], minf);
+
+    min_x=x;
     desired_pose.centerPnt=targetPose.position;
-    desired_pose.ray_length=x[0];
-    x[1]=fmod(x[1],2*Pi);
-    if (x[1]<0)
-        x[1]+=2*Pi;
-    desired_pose.azim=x[1];
-    desired_pose.elev=x[2];
+    desired_pose.ray_length=min_x[0];
+    min_x[1]=fmod(min_x[1],2*Pi);
+    if (min_x[1]<0)
+        min_x[1]+=2*Pi;
+    desired_pose.azim=min_x[1];
+    desired_pose.elev=min_x[2];
 
     trajectory_msg.header.stamp = ros::Time::now();
     mav_msgs::msgMultiDofJointTrajectoryFromPositionYaw(

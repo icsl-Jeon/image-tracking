@@ -19,7 +19,6 @@ double obj_fun(unsigned n, const double *x, double *grad, void *param_info)
 
     double r=x[0],azim=x[1], elev=x[2];
     printf("------------------------------- \n");
-    printf("current r: %f azim %f elev %f\n",r,azim,elev);
     // modular operator
     azim=fmod(azim,2*Pi);
     if (azim<0)
@@ -59,42 +58,68 @@ double obj_fun(unsigned n, const double *x, double *grad, void *param_info)
                                                     (elev-elev_min)/norm_length_elev);
 
     double visibility_cost=0;
-    double decaying_factor=0.2; //bigger = smoother
+
+    double decaying_factor=0.1; //bigger = smoother
     // we translate the potential field along [-1 0 1] to consider periodic effect
     Eigen::Vector3d field_translate(-1,0,1);
+    Eigen::Vector2d visibility_cost_gradient(0,0);
 
     for (int translate_idx=0;translate_idx<3;translate_idx++)
-    for (int azim_idx=0;azim_idx<N_azim;azim_idx++)
-        for (int elev_idx=0; elev_idx<N_elev;elev_idx++)
-        {
+        for (int azim_idx=0;azim_idx<N_azim;azim_idx++)
+            for (int elev_idx=0; elev_idx<N_elev;elev_idx++)
+            {
 
-            double cur_azim=azim_set[azim_idx]+2*Pi*field_translate[translate_idx],cur_elev=elev_set[elev_idx];
-            cur_azim/=norm_length_azim; cur_elev=(cur_elev-elev_min)/norm_length_elev;
-            Eigen::Vector2d sampled_azim_elev_pair_normalized(cur_azim,cur_elev);
+                double cur_azim=azim_set[azim_idx]+2*Pi*field_translate[translate_idx],cur_elev=elev_set[elev_idx];
+                cur_azim/=norm_length_azim; cur_elev=(cur_elev-elev_min)/norm_length_elev;
 
-            double dist=(sampled_azim_elev_pair_normalized-query_azim_elev_pair_normalized).norm();
-            if (dist<1e-6)
-                std::cout<<"caution: distance become zero"<<std::endl;
-            double cur_visibility_cost=w_v*exp(-dist/decaying_factor)
-                                       *pow(d_track-castResult.coeff(elev_idx,azim_idx),2);
+                Eigen::Vector2d sampled_azim_elev_pair_normalized(cur_azim,cur_elev);
 
-            visibility_cost+=cur_visibility_cost;
-            if(grad) {
-                grad[1] += cur_visibility_cost / (-decaying_factor) * (query_azim_elev_pair_normalized[0] - cur_azim) /
-                           dist / norm_length_azim;
-                grad[2] += cur_visibility_cost / (-decaying_factor) * (query_azim_elev_pair_normalized[1] - cur_elev) /
-                           dist / norm_length_elev;
+                double dist=(sampled_azim_elev_pair_normalized-query_azim_elev_pair_normalized).norm();
+//                if (d_track-castResult.coeff(elev_idx,azim_idx)>0 &&pow(query_azim_elev_pair_normalized[0] - sampled_azim_elev_pair_normalized[0],2)<1 ) {
+//                    double cur_visibility_cost = -w_v * pow(dist, 2);
+//                    visibility_cost += cur_visibility_cost;
+//
+//                    if (grad) {
+//                    grad[1] += -w_v * 2 * pow(query_azim_elev_pair_normalized[0] - sampled_azim_elev_pair_normalized[0],1) / norm_length_azim;
+//
+//                    grad[2] += -w_v * 2 * (query_azim_elev_pair_normalized[1] - sampled_azim_elev_pair_normalized[1],1) / norm_length_elev;
+//                }
+//
+//
+//                }
+
+                if (pow(query_azim_elev_pair_normalized[0] - sampled_azim_elev_pair_normalized[0],2)<0.5 ) {
+
+                double cur_visibility_cost=w_v*exp(-pow(dist,2)/decaying_factor)
+                                           *pow(d_track-castResult.coeff(elev_idx,azim_idx),2);
+
+                visibility_cost+=cur_visibility_cost;
+                if(grad) {
+                    visibility_cost_gradient[0]+=cur_visibility_cost / (-decaying_factor) * 2*(query_azim_elev_pair_normalized[0] - cur_azim)
+                                                 / norm_length_azim;
+                    visibility_cost_gradient[1]+=cur_visibility_cost / (-decaying_factor) * 2*(query_azim_elev_pair_normalized[1] - cur_elev)
+                                                 / norm_length_elev;
+
+                }
+
             }
 
+            }
+
+        if(grad) {
+            grad[1] += visibility_cost_gradient[0];
+            grad[2] += visibility_cost_gradient[1];
         }
+//}
+//    printf( "transitional cost : %f \n",translational_cost);
+//    printf( "tracking distance cost : %f\n",tracking_distance_cost);
+//    printf( "visibility cost : %f\n",visibility_cost);
+//    printf("total cost: %f\n",translational_cost+tracking_distance_cost+visibility_cost);
+//    printf("------------------------------- \n");
+    printf("current r: %f azim %f elev %f ::: ",r,azim,elev);
+    printf( "dQ_v : [%f,%f]  ",visibility_cost_gradient[0],visibility_cost_gradient[1]);
 
-
-    printf( "transitional cost : %f \n",translational_cost);
-    printf( "tracking distance cost : %f\n",tracking_distance_cost);
-    printf( "visibility cost : %f\n",visibility_cost);
-    printf("total cost: %f\n",translational_cost+tracking_distance_cost+visibility_cost);
-    printf("------------------------------- \n");
-
+    printf("Q_t: %f Q_v:%f  Q_d: %f\n",translational_cost,tracking_distance_cost,visibility_cost);
 
     return translational_cost+tracking_distance_cost+visibility_cost;
 
@@ -129,7 +154,8 @@ double nonlcon_PWL(unsigned n, const double* x, double* grad, void* param_info)
         azim+=2*Pi;
     std::cout<<"current azim: "<<azim<<" elev: "<<elev<<std::endl;
 
-    int azim_lower_idx=floor(azim/D_azim);
+    int azim_lower_idx=int(floor(azim/D_azim));
+
     if (azim_lower_idx<0)
         azim_lower_idx=0;
     if(azim_lower_idx>=N_azim-1)
@@ -137,12 +163,12 @@ double nonlcon_PWL(unsigned n, const double* x, double* grad, void* param_info)
     int azim_upper_idx=azim_lower_idx+1;
 
 
-    int elev_lower_idx=floor((elev-elev_min)/D_elev);
+    int elev_lower_idx=int(floor((elev-elev_min)/D_elev));
 
     if (elev_lower_idx<0)
         elev_lower_idx=0;
     if(elev_lower_idx>=N_elev-1)
-        elev_lower_idx=N_elev-2;
+       elev_lower_idx=N_elev-2;
     int elev_upper_idx=elev_lower_idx+1;
 
 
@@ -152,14 +178,9 @@ double nonlcon_PWL(unsigned n, const double* x, double* grad, void* param_info)
     double safe_margin=0.5;
     if (elev <elev_lower+(azim-azim_lower)*D_elev/D_azim) // lower triangle
     {
-        Eigen::Vector3d b(castResult.coeff(elev_lower_idx,azim_lower_idx)==d_track ?
-                          castResult.coeff(elev_lower_idx,azim_lower_idx) :std::max(castResult.coeff(elev_lower_idx,azim_lower_idx) - safe_margin,0.0),
-
-                          castResult.coeff(elev_lower_idx,azim_upper_idx)==d_track ?
-                          castResult.coeff(elev_lower_idx,azim_upper_idx) :std::max(castResult.coeff(elev_lower_idx,azim_upper_idx) - safe_margin,0.0),
-
-                          castResult.coeff(elev_upper_idx,azim_upper_idx)==d_track ?
-                          castResult.coeff(elev_upper_idx,azim_upper_idx) :std::max(castResult.coeff(elev_upper_idx,azim_upper_idx) - safe_margin,0.0));
+        Eigen::Vector3d b(castResult.coeff(elev_lower_idx,azim_lower_idx),
+                          castResult.coeff(elev_lower_idx,azim_upper_idx),
+                          castResult.coeff(elev_upper_idx,azim_upper_idx));
         Eigen::Matrix3d A;
         A<<azim_lower, elev_lower, 1,
                 azim_upper,elev_lower, 1,
@@ -178,15 +199,9 @@ double nonlcon_PWL(unsigned n, const double* x, double* grad, void* param_info)
     else
     {
 
-        Eigen::Vector3d b(castResult.coeff(elev_lower_idx,azim_lower_idx)==d_track ?
-                          castResult.coeff(elev_lower_idx,azim_lower_idx) :std::max(castResult.coeff(elev_lower_idx,azim_lower_idx) - safe_margin,0.0),
-
-                          castResult.coeff(elev_upper_idx,azim_lower_idx)==d_track ?
-                          castResult.coeff(elev_upper_idx,azim_lower_idx) :std::max(castResult.coeff(elev_upper_idx,azim_lower_idx) - safe_margin,0.0),
-
-                          castResult.coeff(elev_upper_idx,azim_upper_idx)==d_track ?
-                          castResult.coeff(elev_upper_idx,azim_upper_idx) :std::max(castResult.coeff(elev_upper_idx,azim_upper_idx) - safe_margin,0.0));
-
+        Eigen::Vector3d b(castResult.coeff(elev_lower_idx,azim_lower_idx),
+                          castResult.coeff(elev_upper_idx,azim_lower_idx),
+                          castResult.coeff(elev_upper_idx,azim_upper_idx));
         Eigen::Matrix3d A;
         A<<azim_lower, elev_lower, 1,
                 azim_lower,elev_upper, 1,
