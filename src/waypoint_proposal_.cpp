@@ -237,13 +237,15 @@ void WaypointProposer::castRay(geometry_msgs::Point rayStartPnt,bool verbose
 
 
                 if(octree_obj->castRay(light_start, light_dir, light_end,
-                                    ignoreUnknownCells, tracking_distance)) {
+                                       ignoreUnknownCells, tracking_distance)) {
                     // hit distance - safty margin
-                    this->castResult.coeffRef(ind_elev, ind_azim) = light_end.distance(light_start);
+                    this->castResult.coeffRef(ind_elev, ind_azim) = light_end.distance(light_start)-0.2;
+                    this->optimizer.castRayResultBinary.coeffRef(ind_elev,ind_azim)=1;
                 }
                 else {
                     // no hit = just tracking distance
                     this->castResult.coeffRef(ind_elev, ind_azim) = tracking_distance;
+                    this->optimizer.castRayResultBinary.coeffRef(ind_elev,ind_azim)=0;
                 }
             }
 
@@ -263,23 +265,8 @@ void WaypointProposer::castRay(geometry_msgs::Point rayStartPnt,bool verbose
 
         double raycut_distance=kernel_mean(castResult,elev_kernel_size,azim_kernel_size,elev_idx,azim_idx);
 
-        param_.d_track=raycut_distance-0.1;
-
-        // make binary
-
-        for (unsigned int ind_elev = 0; ind_elev < N_elev; ind_elev++) {
-
-            for (unsigned int ind_azim = 0; ind_azim < N_azim; ind_azim++) {
-                if (this->castResult.coeff(ind_elev,ind_azim)<raycut_distance)
-                    this->optimizer.castRayResultBinary.coeffRef(ind_elev,ind_azim)=1;
-                else
-                    this->optimizer.castRayResultBinary.coeffRef(ind_elev,ind_azim)=0;
-
-            }
-
-        }
-
-
+        param_.d_track=raycut_distance;
+        std::cout<<"desired distance: "<<param_.d_track<<std::endl;
 
         // print the cast result
         if (verbose)
@@ -354,6 +341,42 @@ void  WaypointProposer::viewProposal(){
     param_.optimizer=this->optimizer;
 
 
+    // b spline surface fitting
+
+    azim_elev_mesh xy_mesh=optimizer.mesh_generate();
+
+
+//    std::cout<<"mesh check: "<<std::endl;
+//    std::cout<<xy_mesh.azim_mesh_mat<<std::endl;
+//    std::cout<<xy_mesh.elev_mesh_mat<<std::endl;
+//
+
+    MatrixXd castResultReshaped=optimizer.periodic_reshape(
+            castResult,azim_cur);
+
+    DataTable samples;
+
+    Eigen::VectorXd X(2);
+    double y;
+
+    for(int i = 0; i < N_elev; i++)
+    {
+        for(int j = 0; j < N_azim; j++)
+        {
+
+            X(0) = xy_mesh.azim_mesh_mat.coeff(i,j) + (azim_cur-Pi)  ;
+            X(1) = xy_mesh.elev_mesh_mat.coeff(i,j);
+
+            y = castResultReshaped.coeff(i,j);
+            // Store sample
+            samples.addSample(X,y);
+        }
+    }
+
+    BSpline bspline3 = BSpline::Builder(samples).degree(3).build();
+
+    param_.bspline3=&bspline3;
+
 
 
     if (r_cur<=3)
@@ -379,12 +402,12 @@ void  WaypointProposer::viewProposal(){
     // lower bound
     std::vector<double> lb;
     lb.push_back(3);
-    lb.push_back(azim_cur-PI);
+    lb.push_back(azim_cur-PI+2*Pi/N_azim);
     lb.push_back(param_.elev_min);
     // upper bound
     std::vector<double> ub;
     ub.push_back(6);
-    ub.push_back(azim_cur+PI);
+    ub.push_back(azim_cur+PI-2*Pi/N_azim);
     ub.push_back(param_.elev_max);
 
     nlopt::opt opt(nlopt::LD_MMA,3);
@@ -398,10 +421,10 @@ void  WaypointProposer::viewProposal(){
 
     opt.set_initial_step(step_sizes);
     opt.set_min_objective(obj_fun,&param_);
-    //opt.add_inequality_constraint(constraint,&param_);
+    opt.add_inequality_constraint(constraint,&param_);
     opt.set_upper_bounds(ub);
     opt.set_lower_bounds(lb);
-    opt.set_xtol_rel(1e-3);
+    opt.set_xtol_rel(1e-2);
     auto begin = std::chrono::high_resolution_clock::now();
     double minf;
 

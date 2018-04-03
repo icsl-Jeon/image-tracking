@@ -64,45 +64,48 @@ double obj_fun(unsigned n, const double *x, double *grad, void *param_info)
 
     if (grad){
         grad[1]+=w_v*(p->optimizer.poly_coeff*p->optimizer.get_X_derivative(azim,elev,1,"azim"))(0);
+
         grad[2]+=w_v*(p->optimizer.poly_coeff*p->optimizer.get_X_derivative(azim,elev,1,"elev"))(0);
+
+
+        printf("current r: %f azim %f elev %f ::: ",r,azim,elev);
+        //printf( "dQ_v : [%f,%f]  ",visibility_cost_gradient[0],visibility_cost_gradient[1]);
+
+        printf("Q_t: %f Q_d:%f  Q_v: %f\n",translational_cost,tracking_distance_cost,visibility_cost);
+
 
     }
 
-
-    printf("current r: %f azim %f elev %f ::: ",r,azim,elev);
-    //printf( "dQ_v : [%f,%f]  ",visibility_cost_gradient[0],visibility_cost_gradient[1]);
-
-    printf("Q_t: %f Q_d:%f  Q_v: %f\n",translational_cost,tracking_distance_cost,visibility_cost);
 
     return translational_cost+tracking_distance_cost+visibility_cost;
 
 
 }
 
-//
-//double constraint(unsigned n, const double *x, double *grad, void *param_info){
-//    // x=[r azim elev]
-//    param *p=(param *) param_info;
-//    double r=x[0];
-//
-//    VectorXd X(2);
-//
-//    for(int i=1; i<n;i++)
-//        X(i-1)=x[i];
-//
-//    double res=r-p->bspline3->eval(X);
-//    if (grad){
-//
-//        grad[0]=1;
-//        grad[1]=-(p->bspline3->evalJacobian(X))(0);
-//        grad[2]=-(p->bspline3->evalJacobian(X))(1);
-//    }
-//
-//
-//    return res;
-//
-//}
-//
+
+double constraint(unsigned n, const double *x, double *grad, void *param_info){
+    // x=[r azim elev]
+    param *p=(param *) param_info;
+    double r=x[0];
+
+    VectorXd X(2);
+
+    for(int i=1; i<n;i++)
+        X(i-1)=x[i];
+
+    double res=r-p->bspline3->eval(X);
+    if (grad){
+
+        grad[0]=1;
+        grad[1]=-(p->bspline3->evalJacobian(X))(0);
+        grad[2]=-(p->bspline3->evalJacobian(X))(1);
+    }
+
+
+    return res;
+
+}
+
 
 
 /**
