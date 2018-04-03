@@ -148,7 +148,7 @@ public:
 
 
     // Ray casting & print result
-    void castRay(geometry_msgs::Point,bool=false,double,double);
+    void castRay(geometry_msgs::Point,bool,double,double);
     // Key function :cast rays and optimization
     void viewProposal();
 

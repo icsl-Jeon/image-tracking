@@ -79,30 +79,30 @@ double obj_fun(unsigned n, const double *x, double *grad, void *param_info)
 
 }
 
-
-double constraint(unsigned n, const double *x, double *grad, void *param_info){
-    // x=[r azim elev]
-    param *p=(param *) param_info;
-    double r=x[0];
-
-    VectorXd X(2);
-
-    for(int i=1; i<n;i++)
-        X(i-1)=x[i];
-
-    double res=r-p->bspline3->eval(X);
-    if (grad){
-
-        grad[0]=1;
-        grad[1]=-(p->bspline3->evalJacobian(X))(0);
-        grad[2]=-(p->bspline3->evalJacobian(X))(1);
-    }
-
-
-    return res;
-
-}
-
+//
+//double constraint(unsigned n, const double *x, double *grad, void *param_info){
+//    // x=[r azim elev]
+//    param *p=(param *) param_info;
+//    double r=x[0];
+//
+//    VectorXd X(2);
+//
+//    for(int i=1; i<n;i++)
+//        X(i-1)=x[i];
+//
+//    double res=r-p->bspline3->eval(X);
+//    if (grad){
+//
+//        grad[0]=1;
+//        grad[1]=-(p->bspline3->evalJacobian(X))(0);
+//        grad[2]=-(p->bspline3->evalJacobian(X))(1);
+//    }
+//
+//
+//    return res;
+//
+//}
+//
 
 
 /**

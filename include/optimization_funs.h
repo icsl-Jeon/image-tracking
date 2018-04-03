@@ -131,7 +131,6 @@ struct param{
     Vector3d target_position;
     Vector3d tracker_position;
     Optimizer optimizer; // need for visibility cost computation
-    BSpline* bspline3;
 
 };
 

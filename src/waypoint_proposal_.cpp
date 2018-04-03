@@ -6,6 +6,26 @@
 #include <octomap/OcTreeIterator.hxx>
 #include <optimization_funs.h>
 
+double kernel_mean(MatrixXd input_mat,int mask_size_row,int mask_size_col,int mask_center_row,int mask_center_col){
+    int row=input_mat.rows();
+    int col=input_mat.cols();
+
+
+    double sum=0;
+    int count=0;
+    for (int col_idx=mask_center_col-mask_size_col;col_idx<=mask_center_col+mask_size_col;col_idx++)
+        for (int row_idx=mask_center_row-mask_size_row;row_idx<=mask_center_row+mask_size_row;row_idx++)
+            if (row_idx>=0 && row_idx<row && col_idx>=0 && col_idx<col)
+            {   count++;
+                sum+=input_mat.coeffRef(row_idx,col_idx);
+            }
+
+
+    return sum/count;
+
+}
+
+
 
 /**
   Waypoint Proposal class
@@ -219,13 +239,11 @@ void WaypointProposer::castRay(geometry_msgs::Point rayStartPnt,bool verbose
                 if(octree_obj->castRay(light_start, light_dir, light_end,
                                     ignoreUnknownCells, tracking_distance)) {
                     // hit distance - safty margin
-                    this->castResult.coeffRef(ind_elev, ind_azim) = light_end.distance(light_start)-0.2;
-                    this->optimizer.castRayResultBinary.coeffRef(ind_elev,ind_azim)=1;
+                    this->castResult.coeffRef(ind_elev, ind_azim) = light_end.distance(light_start);
                 }
                 else {
                     // no hit = just tracking distance
                     this->castResult.coeffRef(ind_elev, ind_azim) = tracking_distance;
-                    this->optimizer.castRayResultBinary.coeffRef(ind_elev,ind_azim)=0;
                 }
             }
 
@@ -240,6 +258,26 @@ void WaypointProposer::castRay(geometry_msgs::Point rayStartPnt,bool verbose
         int azim_idx=floor(azim_cur/D_azim);
         int elev_idx=floor((elev_cur-elev_min)/D_elev);
 
+        int azim_kernel_size=1;
+        int elev_kernel_size=1;
+
+        double raycut_distance=kernel_mean(castResult,elev_kernel_size,azim_kernel_size,elev_idx,azim_idx);
+
+        param_.d_track=raycut_distance-0.1;
+
+        // make binary
+
+        for (unsigned int ind_elev = 0; ind_elev < N_elev; ind_elev++) {
+
+            for (unsigned int ind_azim = 0; ind_azim < N_azim; ind_azim++) {
+                if (this->castResult.coeff(ind_elev,ind_azim)<raycut_distance)
+                    this->optimizer.castRayResultBinary.coeffRef(ind_elev,ind_azim)=1;
+                else
+                    this->optimizer.castRayResultBinary.coeffRef(ind_elev,ind_azim)=0;
+
+            }
+
+        }
 
 
 
@@ -315,42 +353,6 @@ void  WaypointProposer::viewProposal(){
     optimizer.poly_surf_fit(azim_cur);
     param_.optimizer=this->optimizer;
 
-
-    // b spline surface fitting
-
-    azim_elev_mesh xy_mesh=optimizer.mesh_generate();
-
-
-//    std::cout<<"mesh check: "<<std::endl;
-//    std::cout<<xy_mesh.azim_mesh_mat<<std::endl;
-//    std::cout<<xy_mesh.elev_mesh_mat<<std::endl;
-//
-
-    MatrixXd castResultReshaped=optimizer.periodic_reshape(
-            castResult,azim_cur);
-
-    DataTable samples;
-
-    Eigen::VectorXd X(2);
-    double y;
-
-    for(int i = 0; i < N_elev; i++)
-    {
-        for(int j = 0; j < N_azim; j++)
-        {
-
-            X(0) = xy_mesh.azim_mesh_mat.coeff(i,j) + (azim_cur-Pi)  ;
-            X(1) = xy_mesh.elev_mesh_mat.coeff(i,j);
-
-            y = castResultReshaped.coeff(i,j);
-            // Store sample
-            samples.addSample(X,y);
-        }
-    }
-
-    BSpline bspline3 = BSpline::Builder(samples).degree(3).build();
-
-    param_.bspline3=&bspline3;
 
 
 
