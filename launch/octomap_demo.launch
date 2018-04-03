@@ -24,13 +24,11 @@
     <arg name="world_name" value="world" />
     <arg name="mav_name" value="$(arg mav_name)"/>
     <arg name="resolution" value="0.1"/>
-    <arg name="max_range" value="4.0"/>
+    <arg name="max_range" value="6.0"/>
     <arg name="height_map" value="true"/>	
     <arg name="sensor_miss" value="0.1"/>
     <arg name="sensor_hit" value="0.9"/>
-    <arg name="clamping_min" value="0.12"/>
-    <arg name="clamping_max" value="0.97"/>
-  </include>
+ </include>
   
   
   

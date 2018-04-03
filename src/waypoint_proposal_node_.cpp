@@ -38,15 +38,16 @@ int main(int argc, char  **argv)
     octomap::point3d freebox_min_point(-xy_length_target/2,-xy_length_target/2,z_min_target);
     octomap::point3d freebox_max_point(xy_length_target/2,xy_length_target/2,z_max_target);
 
+    Optimizer optimizer=*(new Optimizer(N_azim,N_elev,5,3,elev_min,elev_max));
 
-    WaypointProposer waypoint_proposer(elev_min,elev_max,N_azim,N_elev,track_d,freebox_min_point,freebox_max_point,nh_private);
+    WaypointProposer waypoint_proposer(elev_min,elev_max,N_azim,N_elev,track_d,freebox_min_point,freebox_max_point,nh_private,optimizer);
 
     ROS_INFO("proposer started");
-    ros::Rate rate(5);
+    ros::Rate rate(10);
 
     // hovering first
 
-    ros::Duration(1.0).sleep();
+    ros::Duration(2.0).sleep();
 
     while (ros::ok()){
 

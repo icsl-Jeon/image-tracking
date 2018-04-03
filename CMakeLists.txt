@@ -77,7 +77,12 @@ catkin_package(
 
 )
 
-include_directories(include ${catkin_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src)
+#OPENCV
+find_package(OpenCV REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIRS})
+link_libraries(${OpenCV_LIBRARIES})
+
+include_directories(include ${catkin_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src ~/libigl/include)
 
 
 add_executable(waypoint_publisher_from_key src/waypoint_publisher_from_key.cpp)
@@ -86,10 +91,10 @@ add_dependencies(waypoint_publisher_from_key ${catkin_EXPORTED_TARGETS})
 
 
 add_executable(waypoint_proposal_from_octomap_node src/waypoint_proposal_node_.cpp src/waypoint_proposal_.cpp src/optimization_funcs.cpp)
-target_link_libraries(waypoint_proposal_from_octomap_node ${catkin_LIBRARIES} nlopt)
+target_link_libraries(waypoint_proposal_from_octomap_node ${catkin_LIBRARIES} nlopt ${OpenCV_LIBRARIES} splinter-static-3-0)
 add_dependencies(waypoint_proposal_from_octomap_node  ${catkin_EXPORTED_TARGETS})
 
-
+#OCTOMAP 
 find_package(octomap REQUIRED)
 include_directories(${OCTOMAP_INCLUDE_DIRS})
 link_libraries(${OCTOMAP_LIBRARIES})

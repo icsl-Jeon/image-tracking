@@ -14,7 +14,7 @@
 
 //constructor
 WaypointProposer::WaypointProposer(float elev_min,float elev_max,unsigned int N_azim,unsigned int N_elev,float track_d,
-                                   octomap::point3d min_point,octomap::point3d max_point,ros::NodeHandle private_nh)
+                                   octomap::point3d min_point,octomap::point3d max_point,ros::NodeHandle private_nh,Optimizer optimizer)
 {
     this->octree_obj=new OcTree(0.1); //fake initialization
     this->tracking_distance=track_d; //desired tracking distance
@@ -22,8 +22,7 @@ WaypointProposer::WaypointProposer(float elev_min,float elev_max,unsigned int N_
     this->elev_max=elev_max;
     this->N_azim=N_azim;
     this->N_elev=N_elev;
-
-
+    this->optimizer=optimizer;
 
     // hovering first
     trajectory_msg.header.stamp = ros::Time::now();
@@ -183,7 +182,10 @@ void WaypointProposer::OctreeCallback(const octomap_msgs::Octomap& msg){
 
 /** this function cast Rays from a given light source **/
 
-void WaypointProposer::castRay(geometry_msgs::Point rayStartPnt,bool verbose) {
+void WaypointProposer::castRay(geometry_msgs::Point rayStartPnt,bool verbose
+    ,double azim_cur,double elev_cur) {
+
+
 
 
     // initialize the elements
@@ -204,7 +206,7 @@ void WaypointProposer::castRay(geometry_msgs::Point rayStartPnt,bool verbose) {
             it->setLogOdds(octomap::logodds(thresMin));
 
         octree_obj->updateInnerOccupancy();
-        // ray casting
+        // ray casting & update castResult and castResultBinary
         for (unsigned int ind_elev = 0; ind_elev < N_elev; ind_elev++) {
 
             for (unsigned int ind_azim = 0; ind_azim < N_azim; ind_azim++) {
@@ -215,16 +217,29 @@ void WaypointProposer::castRay(geometry_msgs::Point rayStartPnt,bool verbose) {
 
 
                 if(octree_obj->castRay(light_start, light_dir, light_end,
-                                    ignoreUnknownCells, tracking_distance))
-                    // hit distance
-                    this->castResult.coeffRef(ind_elev,ind_azim) = light_end.distance(light_start);
-                else
+                                    ignoreUnknownCells, tracking_distance)) {
+                    // hit distance - safty margin
+                    this->castResult.coeffRef(ind_elev, ind_azim) = light_end.distance(light_start)-0.2;
+                    this->optimizer.castRayResultBinary.coeffRef(ind_elev,ind_azim)=1;
+                }
+                else {
                     // no hit = just tracking distance
-                    this->castResult.coeffRef(ind_elev,ind_azim) = tracking_distance;
-
+                    this->castResult.coeffRef(ind_elev, ind_azim) = tracking_distance;
+                    this->optimizer.castRayResultBinary.coeffRef(ind_elev,ind_azim)=0;
+                }
             }
 
         }
+
+
+
+        // desired distance
+        double D_azim=2*PI/N_azim;
+        double D_elev=(elev_max-elev_min)/N_elev;
+
+        int azim_idx=floor(azim_cur/D_azim);
+        int elev_idx=floor((elev_cur-elev_min)/D_elev);
+
 
 
 
@@ -243,9 +258,10 @@ void WaypointProposer::castRay(geometry_msgs::Point rayStartPnt,bool verbose) {
 /** using the castResult in this class, optimization process **/
 
 void  WaypointProposer::viewProposal(){
-    // cast ray and update castResult matrix
-    castRay(targetPose.position,true);
+
+
     ROS_INFO("casted Rays from target");
+
 
 
     //parametrization of positions
@@ -289,14 +305,66 @@ void  WaypointProposer::viewProposal(){
         azim_cur+=2*Pi;
 
     double r_cur=(param_.target_position-param_.tracker_position).norm();
+
+    // cast ray and update castResult matrix
+    castRay(targetPose.position,true,azim_cur,elev_cur);
+
+    /**
+ *  perform fitting for visibility cost  !!
+ */
+    optimizer.poly_surf_fit(azim_cur);
+    param_.optimizer=this->optimizer;
+
+
+    // b spline surface fitting
+
+    azim_elev_mesh xy_mesh=optimizer.mesh_generate();
+
+
+//    std::cout<<"mesh check: "<<std::endl;
+//    std::cout<<xy_mesh.azim_mesh_mat<<std::endl;
+//    std::cout<<xy_mesh.elev_mesh_mat<<std::endl;
+//
+
+    MatrixXd castResultReshaped=optimizer.periodic_reshape(
+            castResult,azim_cur);
+
+    DataTable samples;
+
+    Eigen::VectorXd X(2);
+    double y;
+
+    for(int i = 0; i < N_elev; i++)
+    {
+        for(int j = 0; j < N_azim; j++)
+        {
+
+            X(0) = xy_mesh.azim_mesh_mat.coeff(i,j) + (azim_cur-Pi)  ;
+            X(1) = xy_mesh.elev_mesh_mat.coeff(i,j);
+
+            y = castResultReshaped.coeff(i,j);
+            // Store sample
+            samples.addSample(X,y);
+        }
+    }
+
+    BSpline bspline3 = BSpline::Builder(samples).degree(3).build();
+
+    param_.bspline3=&bspline3;
+
+
+
     if (r_cur<=3)
-        r_cur=3+1e-6;
+        r_cur=3+1e-3;
     if(r_cur>=6)
-        r_cur=6-1e-6;
+        r_cur=6-1e-3;
+
     printf("------------------------------- \n");
     printf("initial r: %f azim %f elev %f\n",r_cur,azim_cur,elev_cur);
 
 
+
+    // initial value setting
     std::vector<double> x;
     x.push_back(r_cur);
     x.push_back(azim_cur);
@@ -306,18 +374,18 @@ void  WaypointProposer::viewProposal(){
 
     double min_cost=1000;
 
+    // lower bound
     std::vector<double> lb;
     lb.push_back(3);
-    lb.push_back(0);
+    lb.push_back(azim_cur-PI);
     lb.push_back(param_.elev_min);
-
+    // upper bound
     std::vector<double> ub;
     ub.push_back(6);
-    ub.push_back(2*Pi);
+    ub.push_back(azim_cur+PI);
     ub.push_back(param_.elev_max);
 
-
-    nlopt::opt opt(nlopt::LD_SLSQP,3);
+    nlopt::opt opt(nlopt::LD_MMA,3);
 
     std::vector<double> step_sizes;
     double step_size=1e-6;
@@ -328,9 +396,10 @@ void  WaypointProposer::viewProposal(){
 
     opt.set_initial_step(step_sizes);
     opt.set_min_objective(obj_fun,&param_);
+    //opt.add_inequality_constraint(constraint,&param_);
     opt.set_upper_bounds(ub);
     opt.set_lower_bounds(lb);
-    opt.set_xtol_rel(1e-2);
+    opt.set_xtol_rel(1e-3);
     auto begin = std::chrono::high_resolution_clock::now();
     double minf;
 

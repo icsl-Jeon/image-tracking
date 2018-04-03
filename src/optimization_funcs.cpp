@@ -2,6 +2,7 @@
 //
 // Created by jbs on 18. 3. 20.
 //
+#include <optimization_funs.h>
 #include "optimization_funs.h"
 
 double obj_fun(unsigned n, const double *x, double *grad, void *param_info)
@@ -29,7 +30,9 @@ double obj_fun(unsigned n, const double *x, double *grad, void *param_info)
 
 
 
-    // objective functions (Q_t, Q_d)
+    /**
+     * objective functions (Q_t, Q_d)
+     */
     double translational_cost=pow((target_position-tracker_position+view_vector).norm(),2);
     double tracking_distance_cost=w_d*pow(r-d_track,2);
 
@@ -48,177 +51,246 @@ double obj_fun(unsigned n, const double *x, double *grad, void *param_info)
         Eigen::Vector3d v4(-r * sin(elev) * cos(azim), -r * sin(elev) * sin(azim), r * cos(elev));
         grad[2] = 2 * v4.dot(v2);
     }
-    // iterate over castResult
-    Eigen::VectorXd azim_set; azim_set.setLinSpaced(N_azim,0,2*Pi);
-    Eigen::VectorXd elev_set; elev_set.setLinSpaced(N_elev,elev_min,elev_max);
 
-    double norm_length_azim=2*Pi, norm_length_elev=elev_max-elev_min;
 
-    Eigen::Vector2d query_azim_elev_pair_normalized(azim/norm_length_azim,
-                                                    (elev-elev_min)/norm_length_elev);
 
-    double visibility_cost=0;
+    /*
+     * objective function (Q_v)
+    */
 
-    double decaying_factor=0.1; //bigger = smoother
-    // we translate the potential field along [-1 0 1] to consider periodic effect
-    Eigen::Vector3d field_translate(-1,0,1);
-    Eigen::Vector2d visibility_cost_gradient(0,0);
+    // if SEDT and fitting was over in Optimizer class ...
 
-    for (int translate_idx=0;translate_idx<3;translate_idx++)
-        for (int azim_idx=0;azim_idx<N_azim;azim_idx++)
-            for (int elev_idx=0; elev_idx<N_elev;elev_idx++)
-            {
+    double visibility_cost=w_v*(p->optimizer.poly_coeff*p->optimizer.get_X_derivative(azim,elev,0," "))(0);
 
-                double cur_azim=azim_set[azim_idx]+2*Pi*field_translate[translate_idx],cur_elev=elev_set[elev_idx];
-                cur_azim/=norm_length_azim; cur_elev=(cur_elev-elev_min)/norm_length_elev;
+    if (grad){
+        grad[1]+=w_v*(p->optimizer.poly_coeff*p->optimizer.get_X_derivative(azim,elev,1,"azim"))(0);
+        grad[2]+=w_v*(p->optimizer.poly_coeff*p->optimizer.get_X_derivative(azim,elev,1,"elev"))(0);
 
-                Eigen::Vector2d sampled_azim_elev_pair_normalized(cur_azim,cur_elev);
+    }
 
-                double dist=(sampled_azim_elev_pair_normalized-query_azim_elev_pair_normalized).norm();
-//                if (d_track-castResult.coeff(elev_idx,azim_idx)>0 &&pow(query_azim_elev_pair_normalized[0] - sampled_azim_elev_pair_normalized[0],2)<1 ) {
-//                    double cur_visibility_cost = -w_v * pow(dist, 2);
-//                    visibility_cost += cur_visibility_cost;
-//
-//                    if (grad) {
-//                    grad[1] += -w_v * 2 * pow(query_azim_elev_pair_normalized[0] - sampled_azim_elev_pair_normalized[0],1) / norm_length_azim;
-//
-//                    grad[2] += -w_v * 2 * (query_azim_elev_pair_normalized[1] - sampled_azim_elev_pair_normalized[1],1) / norm_length_elev;
-//                }
-//
-//
-//                }
 
-                if (pow(query_azim_elev_pair_normalized[0] - sampled_azim_elev_pair_normalized[0],2)<0.5 ) {
-
-                double cur_visibility_cost=w_v*exp(-pow(dist,2)/decaying_factor)
-                                           *pow(d_track-castResult.coeff(elev_idx,azim_idx),2);
-
-                visibility_cost+=cur_visibility_cost;
-                if(grad) {
-                    visibility_cost_gradient[0]+=cur_visibility_cost / (-decaying_factor) * 2*(query_azim_elev_pair_normalized[0] - cur_azim)
-                                                 / norm_length_azim;
-                    visibility_cost_gradient[1]+=cur_visibility_cost / (-decaying_factor) * 2*(query_azim_elev_pair_normalized[1] - cur_elev)
-                                                 / norm_length_elev;
-
-                }
-
-            }
-
-            }
-
-        if(grad) {
-            grad[1] += visibility_cost_gradient[0];
-            grad[2] += visibility_cost_gradient[1];
-        }
-//}
-//    printf( "transitional cost : %f \n",translational_cost);
-//    printf( "tracking distance cost : %f\n",tracking_distance_cost);
-//    printf( "visibility cost : %f\n",visibility_cost);
-//    printf("total cost: %f\n",translational_cost+tracking_distance_cost+visibility_cost);
-//    printf("------------------------------- \n");
     printf("current r: %f azim %f elev %f ::: ",r,azim,elev);
-    printf( "dQ_v : [%f,%f]  ",visibility_cost_gradient[0],visibility_cost_gradient[1]);
+    //printf( "dQ_v : [%f,%f]  ",visibility_cost_gradient[0],visibility_cost_gradient[1]);
 
-    printf("Q_t: %f Q_v:%f  Q_d: %f\n",translational_cost,tracking_distance_cost,visibility_cost);
+    printf("Q_t: %f Q_d:%f  Q_v: %f\n",translational_cost,tracking_distance_cost,visibility_cost);
 
     return translational_cost+tracking_distance_cost+visibility_cost;
 
 
+}
+
+
+double constraint(unsigned n, const double *x, double *grad, void *param_info){
+    // x=[r azim elev]
+    param *p=(param *) param_info;
+    double r=x[0];
+
+    VectorXd X(2);
+
+    for(int i=1; i<n;i++)
+        X(i-1)=x[i];
+
+    double res=r-p->bspline3->eval(X);
+    if (grad){
+
+        grad[0]=1;
+        grad[1]=-(p->bspline3->evalJacobian(X))(0);
+        grad[2]=-(p->bspline3->evalJacobian(X))(1);
+    }
+
+
+    return res;
 
 }
+
 
 
 /**
- * non linear inequality constraint in the form of piecewise linear
- * c_i w.r.t x_j corresponds to grad[i*n + j]
+ *  special class for visibility cost
  */
-double nonlcon_PWL(unsigned n, const double* x, double* grad, void* param_info)
+
+Optimizer::Optimizer() {};
+Optimizer::Optimizer(int N_azim, int N_elev, int nx, int ny, double elev_min ,double elev_max)
 {
 
-    param *p=(param *) param_info;
-    double w_d=p->w_d, w_v=p->w_v, elev_min=p->elev_min, elev_max=p->elev_max;
-    double d_track=p->d_track;
-    int N_azim=p->N_azim, N_elev=p->N_elev;
-    Eigen::MatrixXd castResult=p->castResult;
 
-    double D_azim=(2*Pi)/double(N_azim-1);
-    double D_elev=(elev_max-elev_min)/double(N_elev-1);
+    pi=3.141592;
+    this->N_azim=N_azim;
+    this->N_elev=N_elev;
+    this->nx=nx;
+    this->ny=ny;
+    this->elev_min=elev_min;
+    this->elev_max=elev_max;
 
-    // iterate over castResult
-    Eigen::VectorXd azim_set; azim_set.setLinSpaced(N_azim,0,2*Pi);
-    Eigen::VectorXd elev_set; elev_set.setLinSpaced(N_elev,elev_min,elev_max);
+    this->azim_set.setLinSpaced(N_azim,0,2*pi);
+    this->elev_set.setLinSpaced(N_elev,elev_min,elev_max);
 
-    double azim=x[1], elev=x[2];
-    azim=fmod(azim,2*Pi);
-    if (azim<0)
-        azim+=2*Pi;
-    std::cout<<"current azim: "<<azim<<" elev: "<<elev<<std::endl;
+    // mesh generate
+    mesh_generate();
+    castRayResultBinary.resize(N_elev,N_azim);
 
-    int azim_lower_idx=int(floor(azim/D_azim));
+    // possible pair of order of poly
+    for(int order=0;order<=nx;order++)
+        for (int i=order;i>=0;i--)
+            if (order-i<=ny)
+                order_pair.push_back(*(new Vector2d(i, order - i)));
 
-    if (azim_lower_idx<0)
-        azim_lower_idx=0;
-    if(azim_lower_idx>=N_azim-1)
-        azim_lower_idx=N_azim-2;
-    int azim_upper_idx=azim_lower_idx+1;
-
-
-    int elev_lower_idx=int(floor((elev-elev_min)/D_elev));
-
-    if (elev_lower_idx<0)
-        elev_lower_idx=0;
-    if(elev_lower_idx>=N_elev-1)
-       elev_lower_idx=N_elev-2;
-    int elev_upper_idx=elev_lower_idx+1;
-
-
-    double azim_lower=azim_set[azim_lower_idx], azim_upper=azim_set[azim_upper_idx];
-    double elev_lower=elev_set[elev_lower_idx], elev_upper=elev_set[elev_upper_idx];
-
-    double safe_margin=0.5;
-    if (elev <elev_lower+(azim-azim_lower)*D_elev/D_azim) // lower triangle
-    {
-        Eigen::Vector3d b(castResult.coeff(elev_lower_idx,azim_lower_idx),
-                          castResult.coeff(elev_lower_idx,azim_upper_idx),
-                          castResult.coeff(elev_upper_idx,azim_upper_idx));
-        Eigen::Matrix3d A;
-        A<<azim_lower, elev_lower, 1,
-                azim_upper,elev_lower, 1,
-                azim_upper, elev_upper, 1;
-
-        // z=ax + by + c
-        Eigen::Vector3d plane_coeff=A.inverse()*b;
-        if (grad) {
-            grad[0] = 1;
-            grad[1] = -plane_coeff[0];
-            grad[2] = -plane_coeff[1];
-        }
-        return x[0]-plane_coeff[0]*x[1]-plane_coeff[1]*x[2]-plane_coeff[2];
-
-    }
-    else
-    {
-
-        Eigen::Vector3d b(castResult.coeff(elev_lower_idx,azim_lower_idx),
-                          castResult.coeff(elev_upper_idx,azim_lower_idx),
-                          castResult.coeff(elev_upper_idx,azim_upper_idx));
-        Eigen::Matrix3d A;
-        A<<azim_lower, elev_lower, 1,
-                azim_lower,elev_upper, 1,
-                azim_upper, elev_upper, 1;
-
-        // z=ax + by + c
-        Eigen::Vector3d plane_coeff=A.inverse()*b;
-        if(grad) {
-            grad[0] = 1;
-            grad[1] = -plane_coeff[0];
-            grad[2] = -plane_coeff[1];
-        }
-        return x[0]-plane_coeff[0]*x[1]-plane_coeff[1]*x[2]-plane_coeff[2];
-
-    }
+    // construct trial_A for fitting
+    trial_A.resize(mesh_azim.size(),order_pair.size());
 
 }
+
+
+
+azim_elev_mesh Optimizer::mesh_generate() {
+
+    MatrixXd azim_mesh_mat(N_elev,N_azim);
+    MatrixXd elev_mesh_mat(N_elev,N_azim);
+
+    for (int i=0; i<N_elev ;i++)
+        for(int j=0; j<N_azim;j++)
+        {
+            azim_mesh_mat.coeffRef(i,j)=azim_set[j];
+            elev_mesh_mat.coeffRef(i,j)=elev_set[i];
+
+        }
+    // reshape columwise
+    Map<RowVectorXd> mesh_azim1(azim_mesh_mat.data(), azim_mesh_mat.size());
+    Map<RowVectorXd> mesh_elev1(elev_mesh_mat.data(), elev_mesh_mat.size());
+
+    // update
+    this->mesh_azim=mesh_azim1;
+    this->mesh_elev=mesh_elev1;
+
+    azim_elev_mesh mesh;
+    mesh.azim_mesh_mat=azim_mesh_mat;
+    mesh.elev_mesh_mat=elev_mesh_mat;
+
+    return mesh;
+
+}
+
+
+void Optimizer::castRayResultUpdate(MatrixXd & castresult) {
+    // matrix update
+    this->castRayResultBinary=castresult;
+
+}
+// signed distance transform
+void Optimizer::SEDT(double query_azim)
+{
+    //firstly, reshape considering periodicity centering query_azim
+    MatrixXd castRayResultBinaryReshaped=periodic_reshape(castRayResultBinary,query_azim);
+    std::cout<<"reshaped castRayResult:"<<std::endl;
+    std::cout<<castRayResultBinaryReshaped<<std::endl;
+    Mat bw_cast(N_azim,N_elev,CV_64F,castRayResultBinaryReshaped.data());
+    bw_cast.convertTo(bw_cast,CV_8UC(1));
+    transpose(bw_cast,bw_cast);
+
+    // calculate SEDT
+    cv::Mat dist,dist1,dist2;
+    // in this world 1= white... 0=black... fuck!
+    distanceTransform(1-bw_cast, dist1, CV_DIST_L2, 0);
+    std::vector<Vec4i> hierarchy;
+    std::vector<std::vector<Point> > contours;
+    findContours(bw_cast,contours,hierarchy,CV_RETR_EXTERNAL,CV_CHAIN_APPROX_NONE,Point(0, 0));
+    for( int i = 0; i< contours.size(); i++ ) // for each cluster
+        for (int j=0;j<contours[i].size();j++)
+            bw_cast.at<uchar>(contours[i][j].y,contours[i][j].x)=0;
+
+
+    distanceTransform(bw_cast, dist2, CV_DIST_L2, 0);
+    dist=dist1-dist2;
+    // to eigen
+    cv2eigen(dist,SDF);
+    std::cout<<"SEDT"<<std::endl;
+    std::cout<<SDF<<std::endl;
+
+
+    // fitting targets(z) are changed.
+    Map<RowVectorXd> SDF_flat(SDF.data(), SDF.size());
+
+    trial_b.resize(mesh_azim.size());
+    for(int k=0;k<mesh_azim.size();k++) //for each data sample
+        trial_b[k]=-SDF_flat[k];
+
+}
+
+// n=0,1
+MatrixXd Optimizer::get_X_derivative(double azim, double elev, int n,std::string wrt) {
+    MatrixXd X(order_pair.size(),1); //column matrix
+    X.setZero();
+    if(n==0) //no derivative
+        for (int i=0;i<order_pair.size();i++)
+            X.coeffRef(i,0)=pow(azim, order_pair[i][0]) * pow(elev, order_pair[i][1]);
+
+    else {
+
+        if (wrt == "azim") //1st derivative wrt azim
+        {
+            for (int i = 0; i < order_pair.size(); i++)
+                if (order_pair[i][0] > 0)
+                    X.coeffRef(i, 0) = order_pair[i][0] * pow(azim, order_pair[i][0] - 1) * pow(elev, order_pair[i][1]);
+        }
+
+        else //1st derivative wrt elev
+        {
+            for (int i = 0; i < order_pair.size(); i++)
+                if (order_pair[i][1] > 0)
+                    X.coeffRef(i, 0) = pow(azim, order_pair[i][0]) * order_pair[i][1] * pow(elev, order_pair[i][1] - 1);
+        }
+    }
+
+    return X;
+}
+
+
+MatrixXd Optimizer::col_slice_real_value(double lower_val,double upper_val,MatrixXd mat){
+    // slice mat with real valued index
+    double D_azim=2*pi/N_azim;
+    MatrixXd sub_mat;
+    int lower_idx=round(lower_val/D_azim);
+    int col_num=mat.cols();
+    int upper_idx=round(upper_val/D_azim)-1;
+    if (upper_idx>=col_num)
+        upper_idx=col_num-1;
+
+
+    VectorXi slicing_row,slicing_col;
+    slicing_row.setLinSpaced(mat.rows(),0,mat.rows());
+    slicing_col.setLinSpaced(upper_idx-lower_idx+1,lower_idx,upper_idx);
+    igl::slice(mat,slicing_row,slicing_col,sub_mat);
+    return sub_mat;
+}
+
+// this function produce reshaped castray result binary
+MatrixXd Optimizer::periodic_reshape(MatrixXd mat,double query_azim) {
+    if (query_azim-pi>0)
+        return igl::cat(2,col_slice_real_value(query_azim-pi,2*pi,mat),
+                        col_slice_real_value(0,query_azim-pi,mat));
+    else
+        return igl::cat(2,col_slice_real_value(query_azim+pi,2*pi,mat),
+                        col_slice_real_value(0,query_azim+pi,mat));
+}
+
+// perform fitting to stored data ({azim_set elev_set , SDF_flattened})
+void Optimizer::poly_surf_fit(double query_azim) {
+    // periodic reshape and fitting the cost
+    SEDT(query_azim);
+    // independent variable [azim,elev]
+    for(int k=0;k<mesh_azim.size();k++) //for each data sample
+        for (int i=0;i<order_pair.size();i++)
+            trial_A.coeffRef(k,i)=pow(mesh_azim[k]+(query_azim-pi), order_pair[i][0]) * pow(mesh_elev[k], order_pair[i][1]);
+
+    // dependent variable [cost]
+
+    poly_coeff=trial_A.colPivHouseholderQr().solve(trial_b);
+
+};
+
+
+
+
 
 /**  example usage
 int main() {

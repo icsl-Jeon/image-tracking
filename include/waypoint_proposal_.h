@@ -52,6 +52,12 @@
 #define PI 3.141592
 #define BB 2;
 
+// B spline surface
+
+#include <SPLINTER/datatable.h>
+#include <SPLINTER/bspline.h>
+#include <SPLINTER/bsplinebuilder.h>
+
 
 struct viewVector{
 
@@ -114,7 +120,7 @@ class WaypointProposer{
 public:
 
     //Constructor / Destructor
-    WaypointProposer(float,float,unsigned int,unsigned int,float,octomap::point3d,octomap::point3d,ros::NodeHandle);
+    WaypointProposer(float,float,unsigned int,unsigned int,float,octomap::point3d,octomap::point3d,ros::NodeHandle,Optimizer);
     ~ WaypointProposer();
 
     // castRay
@@ -127,6 +133,7 @@ public:
 
     //Ray result
     MatrixXd castResult; // castResult matrix. [i,j] elements=hit length from i th azim and j th elev
+
 
     // objects
     std::string trackerName;
@@ -141,7 +148,7 @@ public:
 
 
     // Ray casting & print result
-    void castRay(geometry_msgs::Point,bool=false);
+    void castRay(geometry_msgs::Point,bool=false,double,double);
     // Key function :cast rays and optimization
     void viewProposal();
 
@@ -163,6 +170,9 @@ public:
     octomap::point3d freebox_max_point;
     visualization_msgs::Marker BBMarker;
 
+    // visibility cost computation
+
+    Optimizer optimizer;
 
     //ROS
     ros::NodeHandle private_nh;
@@ -172,6 +182,7 @@ public:
     ros::Publisher marker_pub;
     ros::Publisher boundingCube_pub;
     ros::Publisher trajectory_pub;
+
     void waypoint_publish();
     void marker_publish();
     bool state_callback_flag,octomap_callback_flag;

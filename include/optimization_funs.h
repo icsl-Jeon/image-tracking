@@ -14,19 +14,18 @@
 #include <igl/slice.h>  //really convient
 #include <igl/cat.h>
 
+// B spline surface
+
+#include <SPLINTER/datatable.h>
+#include <SPLINTER/bspline.h>
+#include <SPLINTER/bsplinebuilder.h>
+
 #define Pi 3.141592
+
+
 
 using namespace cv;
 using namespace Eigen;
-typedef struct {
-    int N_azim, N_elev;
-    double w_d, w_v,elev_min,elev_max,d_track ;
-    MatrixXd castResult;
-    Vector3d target_position;
-    Vector3d tracker_position;
-
-} param;
-
 struct azim_elev_mesh{
 
     MatrixXd azim_mesh_mat;
@@ -42,19 +41,45 @@ struct azim_elev_mesh{
     }
 };
 
+// this is for buffer calculation
+//struct Filter_Buffer{
+//
+//    int N_buffer; //buffer number
+//    std::vector<std::vector> Buffer;
+//    std::vector<double> Residual;
+//    std::vector<double> Weights;
+//
+//
+//    Filter_Buffer(int N){
+//
+//        Buffer.reserve(N);
+//        Residual.reserve(N);
+//        Weights.reserve(N);
+//
+//    }
+//
+//    void buffer_update(std::vector new_point){
+//
+//
+//
+//    }
+
+
+
+
+
 
 /**
  * cost function
  */
 
 double obj_fun(unsigned n, const double *, double *, void *);
-
+double constraint(unsigned n, const double *, double *, void *);
 
 /**
  * non linear inequality constraint in the form of piecewise linear
  * c_i w.r.t x_j corresponds to grad[i*n + j]
  */
-double nonlcon_PWL(unsigned , const double* , double* , void* );
 
 
 /**
@@ -63,11 +88,14 @@ double nonlcon_PWL(unsigned , const double* , double* , void* );
 
 class Optimizer {
 public:
+    Optimizer(); //hrrr...
     Optimizer(int,int,int,int,double,double); //int N_azim and N_elev / nx,ny / elev_range
     azim_elev_mesh mesh_generate(); // this is for surf fit and surf drawing
-    MatrixXd periodic_reshape(double);
+    MatrixXd periodic_reshape(MatrixXd, double);
     MatrixXd col_slice_real_value(double,double,MatrixXd); //column-wise slicing with real value
     RowVectorXd poly_coeff; //
+    MatrixXd castRayResultBinary;
+
     double pi;
 
     void castRayResultUpdate(MatrixXd& ); // update the matrix
@@ -79,7 +107,6 @@ public:
 
 private:
     //optimization quadratic function
-    MatrixXd castRayResultBinary;
     MatrixXd SDF; //signed distance transform field / N_elev x N_azim
     MatrixXd trial_A; // used in surface fitting
     VectorXd trial_b; // also
@@ -93,6 +120,20 @@ private:
     std::vector<Vector2d> order_pair;  // this is possible combination of powers
 };
 
+using namespace SPLINTER;
+
+struct param{
+
+
+    int N_azim, N_elev;
+    double w_d, w_v,elev_min,elev_max,d_track ;
+    MatrixXd castResult;
+    Vector3d target_position;
+    Vector3d tracker_position;
+    Optimizer optimizer; // need for visibility cost computation
+    BSpline* bspline3;
+
+};
 
 
 
