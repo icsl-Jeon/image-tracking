@@ -36,6 +36,7 @@ double kernel_mean(MatrixXd input_mat,int mask_size_row,int mask_size_col,int ma
 WaypointProposer::WaypointProposer(float elev_min,float elev_max,unsigned int N_azim,unsigned int N_elev,float track_d,
                                    octomap::point3d min_point,octomap::point3d max_point,ros::NodeHandle private_nh,Optimizer optimizer)
 {
+    this->filter=Filter(3,10);
     this->octree_obj=new OcTree(0.1); //fake initialization
     this->tracking_distance=track_d; //desired tracking distance
     this->elev_min=elev_min;
@@ -373,7 +374,7 @@ void  WaypointProposer::viewProposal(){
         }
     }
 
-    BSpline bspline3 = BSpline::Builder(samples).degree(3).build();
+    BSpline bspline3 = BSpline::Builder(samples).degree(3).smoothing(BSpline::Smoothing::PSPLINE).alpha(0.05).build();
 
     param_.bspline3=&bspline3;
 
@@ -413,13 +414,13 @@ void  WaypointProposer::viewProposal(){
     nlopt::opt opt(nlopt::LD_MMA,3);
 
     std::vector<double> step_sizes;
-    double step_size=1e-6;
+    double step_size=1e-10;
     step_sizes.push_back(step_size);
     step_sizes.push_back(step_size);
     step_sizes.push_back(step_size);
 
 
-    opt.set_initial_step(step_sizes);
+//    opt.set_initial_step(step_sizes);
     opt.set_min_objective(obj_fun,&param_);
     opt.add_inequality_constraint(constraint,&param_);
     opt.set_upper_bounds(ub);
@@ -467,13 +468,28 @@ void  WaypointProposer::viewProposal(){
     printf("found minimum at f(%g,%g,%g) = %0.10g\n", x[0], x[1], x[2], minf);
 
     min_x=x;
+
+    // push the solution to filter
+
+    std::vector<double> update_sol;
+    update_sol.push_back(min_x[0]);
+    update_sol.push_back(min_x[1]);
+    update_sol.push_back(min_x[2]);
+
+    filter.buffer_insert(update_sol);
+
+    std::vector<double> filter_out=filter.filter_output();
+
     desired_pose.centerPnt=targetPose.position;
-    desired_pose.ray_length=min_x[0];
-    min_x[1]=fmod(min_x[1],2*Pi);
-    if (min_x[1]<0)
-        min_x[1]+=2*Pi;
-    desired_pose.azim=min_x[1];
-    desired_pose.elev=min_x[2];
+
+
+    desired_pose.ray_length=filter_out[0];
+    min_x[1]=fmod(filter_out[1],2*Pi);
+    if (filter_out[1]<0)
+        filter_out[1]+=2*Pi;
+    desired_pose.azim=filter_out[1];
+    desired_pose.elev=filter_out[2];
+
 
     trajectory_msg.header.stamp = ros::Time::now();
     mav_msgs::msgMultiDofJointTrajectoryFromPositionYaw(

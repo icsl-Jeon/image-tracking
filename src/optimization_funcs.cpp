@@ -206,8 +206,16 @@ void Optimizer::SEDT(double query_azim)
     dist=dist1-dist2;
     // to eigen
     cv2eigen(dist,SDF);
+
+
+
+    //clamping SEDT value for better optimization
+
+
+
     std::cout<<"SEDT"<<std::endl;
     std::cout<<SDF<<std::endl;
+
 
 
     // fitting targets(z) are changed.

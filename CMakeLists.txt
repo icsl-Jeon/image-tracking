@@ -90,7 +90,7 @@ target_link_libraries(waypoint_publisher_from_key ${catkin_LIBRARIES})
 add_dependencies(waypoint_publisher_from_key ${catkin_EXPORTED_TARGETS})
 
 
-add_executable(waypoint_proposal_from_octomap_node src/waypoint_proposal_node_.cpp src/waypoint_proposal_.cpp src/optimization_funcs.cpp)
+add_executable(waypoint_proposal_from_octomap_node src/waypoint_proposal_node_.cpp src/waypoint_proposal_.cpp src/optimization_funcs.cpp src/smoothing_filter.cpp)
 target_link_libraries(waypoint_proposal_from_octomap_node ${catkin_LIBRARIES} nlopt ${OpenCV_LIBRARIES} splinter-static-3-0)
 add_dependencies(waypoint_proposal_from_octomap_node  ${catkin_EXPORTED_TARGETS})
 

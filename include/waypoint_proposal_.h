@@ -58,6 +58,9 @@
 #include <SPLINTER/bspline.h>
 #include <SPLINTER/bsplinebuilder.h>
 
+// smoothing filter
+
+#include <smoothing_filter.h>
 
 struct viewVector{
 
@@ -122,6 +125,9 @@ public:
     //Constructor / Destructor
     WaypointProposer(float,float,unsigned int,unsigned int,float,octomap::point3d,octomap::point3d,ros::NodeHandle,Optimizer);
     ~ WaypointProposer();
+
+    // Filter
+    Filter filter;
 
     // castRay
     float tracking_distance;

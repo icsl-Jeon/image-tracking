@@ -103,7 +103,7 @@
 	<param name="target_name" type="string" value="target"/>
 	<param name="tracker_name" type="string" value="$(arg mav_name)"/>
 	<param name="w_v" type="double" value="4"/> <!--visibility cost weight-->
-	<param name="w_d" type="double" value="2"/> <!--tracking_distance cost weight-->
+	<param name="w_d" type="double" value="0.5"/> <!--tracking_distance cost weight-->
 	</node>
   </group>
 
