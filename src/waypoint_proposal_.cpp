@@ -493,10 +493,9 @@ void  WaypointProposer::viewProposal(){
 
 
 
-//    filter.buffer_insert(update_sol);
+//    f
 //
-//    std::vector<double> filter_out=filter.filter_output();
-
+//
     desired_pose.centerPnt=targetPose.position;
 
 //
@@ -509,18 +508,19 @@ void  WaypointProposer::viewProposal(){
     update_sol.push_back(desired_pose.getPoseFromViewVector().translation.x);
     update_sol.push_back(desired_pose.getPoseFromViewVector().translation.y);
     update_sol.push_back(desired_pose.getPoseFromViewVector().translation.z);
+    filter.buffer_insert(update_sol);
 
+    std::vector<double> filter_out=filter.filter_output();
 
-    desired_pose.getPoseFromViewVector().translation.x;
-    desired_pose.getPoseFromViewVector().translation.y;
-    desired_pose.getPoseFromViewVector().translation.z;
+    double desired_yaw=atan2(filter_out[1]-targetPose.position.y,filter_out[0]-targetPose.position.x)+PI;
+
 
     trajectory_msg.header.stamp = ros::Time::now();
     mav_msgs::msgMultiDofJointTrajectoryFromPositionYaw(
-            Eigen::Vector3d( ,
-                             ,
-                             )
-            ,desired_pose.getYaw(), &trajectory_msg);
+            Eigen::Vector3d(filter_out[0] ,
+                            filter_out[1] ,
+                            filter_out[2] )
+            ,desired_yaw, &trajectory_msg);
 
     // for visualization
 
