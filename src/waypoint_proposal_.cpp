@@ -36,7 +36,7 @@ double kernel_mean(MatrixXd input_mat,int mask_size_row,int mask_size_col,int ma
 WaypointProposer::WaypointProposer(float elev_min,float elev_max,unsigned int N_azim,unsigned int N_elev,float track_d,
                                    octomap::point3d min_point,octomap::point3d max_point,ros::NodeHandle private_nh,Optimizer optimizer)
 {
-    this->filter=Filter(3,10);
+    this->filter=Filter(3,20);
     this->octree_obj=new OcTree(0.1); //fake initialization
     this->tracking_distance=track_d; //desired tracking distance
     this->elev_min=elev_min;
@@ -342,7 +342,11 @@ void  WaypointProposer::viewProposal(){
     param_.optimizer=this->optimizer;
 
 
-    // b spline surface fitting
+
+
+
+
+    // b spline surface fitting for constraint
 
     azim_elev_mesh xy_mesh=optimizer.mesh_generate();
 
@@ -355,10 +359,14 @@ void  WaypointProposer::viewProposal(){
     MatrixXd castResultReshaped=optimizer.periodic_reshape(
             castResult,azim_cur);
 
-    DataTable samples;
+    MatrixXd SEDT=optimizer.SDF;
+
+
+
+    DataTable samples,samples_Qv;
 
     Eigen::VectorXd X(2);
-    double y;
+    double y,y_Qv;
 
     for(int i = 0; i < N_elev; i++)
     {
@@ -369,15 +377,18 @@ void  WaypointProposer::viewProposal(){
             X(1) = xy_mesh.elev_mesh_mat.coeff(i,j);
 
             y = castResultReshaped.coeff(i,j);
+            y_Qv=-SEDT.coeff(i,j);
+
             // Store sample
             samples.addSample(X,y);
+            samples_Qv.addSample(X,y_Qv);
         }
     }
 
     BSpline bspline3 = BSpline::Builder(samples).degree(3).smoothing(BSpline::Smoothing::PSPLINE).alpha(0.05).build();
-
+    BSpline bspline=BSpline::Builder(samples_Qv).degree(3).smoothing(BSpline::Smoothing::PSPLINE).alpha(0.5).build();
     param_.bspline3=&bspline3;
-
+    param_.bspline=&bspline;
 
 
     if (r_cur<=3)
@@ -403,12 +414,12 @@ void  WaypointProposer::viewProposal(){
     // lower bound
     std::vector<double> lb;
     lb.push_back(3);
-    lb.push_back(azim_cur-PI+2*Pi/N_azim);
+    lb.push_back(azim_cur-PI);
     lb.push_back(param_.elev_min);
     // upper bound
     std::vector<double> ub;
     ub.push_back(6);
-    ub.push_back(azim_cur+PI-2*Pi/N_azim);
+    ub.push_back(azim_cur+PI);
     ub.push_back(param_.elev_max);
 
     nlopt::opt opt(nlopt::LD_MMA,3);
@@ -484,9 +495,9 @@ void  WaypointProposer::viewProposal(){
 
 
     desired_pose.ray_length=filter_out[0];
-    min_x[1]=fmod(filter_out[1],2*Pi);
-    if (filter_out[1]<0)
-        filter_out[1]+=2*Pi;
+//    min_x[1]=fmod(filter_out[1],2*Pi);
+//    if (filter_out[1]<0)
+//        filter_out[1]+=2*Pi;
     desired_pose.azim=filter_out[1];
     desired_pose.elev=filter_out[2];
 

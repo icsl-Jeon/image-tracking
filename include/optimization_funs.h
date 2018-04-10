@@ -104,10 +104,10 @@ public:
 
     // get n th derivative of vector X=[azim^i * elev^j]_(i=0...,j=0...)
     MatrixXd get_X_derivative(double,double,int,std::string);
-
+    MatrixXd SDF; //signed distance transform field / N_elev x N_azim
 private:
     //optimization quadratic function
-    MatrixXd SDF; //signed distance transform field / N_elev x N_azim
+
     MatrixXd trial_A; // used in surface fitting
     VectorXd trial_b; // also
     int nx,ny; // order of x , y in polynomial surface
@@ -131,7 +131,8 @@ struct param{
     Vector3d target_position;
     Vector3d tracker_position;
     Optimizer optimizer; // need for visibility cost computation
-    BSpline* bspline3;
+    BSpline* bspline3; // this spline is for constraint
+    BSpline* bspline; // this spline for objective function
 };
 
 

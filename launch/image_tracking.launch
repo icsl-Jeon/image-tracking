@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <launch>
   <arg name="mav_name" default="firefly"/>
-  <arg name="world_name" default="image_tracking3"/>
+  <arg name="world_name" default="image_tracking2"/>
   <arg name="enable_logging" default="false" />
   <arg name="enable_ground_truth" default="true" />
   <arg name="log_file" default="$(arg mav_name)" />  
@@ -95,15 +95,15 @@
 	<param name="track_d" type="double" value="5.0"/>
 	<param name="elev_min" type="double" value="$(eval 3.141592/8.0)"/>
 	<param name="elev_max" type="double" value="$(eval 3.141592/4.0)"/>
-	<param name="N_azim" type="int" value="12"/>
-	<param name="N_elev" type="int" value="6"/>
+	<param name="N_azim" type="int" value="20"/>
+	<param name="N_elev" type="int" value="12"/>
 	<param name="xy_length_target" type="double" value="1"/>
 	<param name="z_min_target" type="double" value="-0.5"/>
 	<param name="z_max_target" type="double" value="0.8"/>
 	<param name="target_name" type="string" value="target"/>
 	<param name="tracker_name" type="string" value="$(arg mav_name)"/>
-	<param name="w_v" type="double" value="4"/> <!--visibility cost weight-->
-	<param name="w_d" type="double" value="0.5"/> <!--tracking_distance cost weight-->
+	<param name="w_v" type="double" value="1.5"/> <!--visibility cost weight-->
+	<param name="w_d" type="double" value="0.3"/> <!--tracking_distance cost weight-->
 	</node>
   </group>
 

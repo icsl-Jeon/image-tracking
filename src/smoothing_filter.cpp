@@ -61,7 +61,11 @@ std::vector<double> Filter::filter_output() {
     for (int i = 0; i < buffer_size; i++) {
         double L2_dist = 0;
         for (int j = 0; j < D; j++)
-            L2_dist += pow(Buffer[j][i] - center[j], 2);
+            if (j > 0)
+                L2_dist += pow(Buffer[j][i] - center[j], 2);
+            else
+                L2_dist += pow(Buffer[j][i] - center[j], 2);
+
         residual.push_back(sqrt(L2_dist));
     }
 

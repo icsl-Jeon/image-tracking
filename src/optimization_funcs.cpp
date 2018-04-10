@@ -5,6 +5,14 @@
 #include <optimization_funs.h>
 #include "optimization_funs.h"
 
+double clamping(double x)
+{
+    if(x>=4.5)
+        return 4.5;
+}
+
+
+
 double obj_fun(unsigned n, const double *x, double *grad, void *param_info)
 {
     // parsing
@@ -60,19 +68,21 @@ double obj_fun(unsigned n, const double *x, double *grad, void *param_info)
 
     // if SEDT and fitting was over in Optimizer class ...
 
+
     double visibility_cost=w_v*(p->optimizer.poly_coeff*p->optimizer.get_X_derivative(azim,elev,0," "))(0);
+    Vector2d X(azim,elev);
+//    double visibility_cost=w_v*(p->bspline->eval(X));
 
     if (grad){
         grad[1]+=w_v*(p->optimizer.poly_coeff*p->optimizer.get_X_derivative(azim,elev,1,"azim"))(0);
-
+       // grad[1]+=w_v*(p->bspline->evalJacobian(X))(0);
         grad[2]+=w_v*(p->optimizer.poly_coeff*p->optimizer.get_X_derivative(azim,elev,1,"elev"))(0);
-
+       // grad[2]+=w_v*(p->bspline->evalJacobian(X))(1);
 
         printf("current r: %f azim %f elev %f ::: ",r,azim,elev);
         //printf( "dQ_v : [%f,%f]  ",visibility_cost_gradient[0],visibility_cost_gradient[1]);
 
         printf("Q_t: %f Q_d:%f  Q_v: %f\n",translational_cost,tracking_distance_cost,visibility_cost);
-
 
     }
 
@@ -208,6 +218,7 @@ void Optimizer::SEDT(double query_azim)
     cv2eigen(dist,SDF);
 
 
+    SDF=SDF.unaryExpr(std::ptr_fun( clamping));
 
     //clamping SEDT value for better optimization
 
@@ -276,6 +287,10 @@ MatrixXd Optimizer::col_slice_real_value(double lower_val,double upper_val,Matri
 
 // this function produce reshaped castray result binary
 MatrixXd Optimizer::periodic_reshape(MatrixXd mat,double query_azim) {
+    query_azim=fmod(query_azim,2*Pi);
+    if (query_azim<0)
+        query_azim+=2*Pi;
+
     if (query_azim-pi>0)
         return igl::cat(2,col_slice_real_value(query_azim-pi,2*pi,mat),
                         col_slice_real_value(0,query_azim-pi,mat));
@@ -296,6 +311,7 @@ void Optimizer::poly_surf_fit(double query_azim) {
     // dependent variable [cost]
 
     poly_coeff=trial_A.colPivHouseholderQr().solve(trial_b);
+
 
 };
 
