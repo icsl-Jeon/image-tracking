@@ -227,13 +227,18 @@ void WaypointProposer::castRay(geometry_msgs::Point rayStartPnt,bool verbose
             it->setLogOdds(octomap::logodds(thresMin));
 
         octree_obj->updateInnerOccupancy();
+
+        // generate mesh
+
+
+
         // ray casting & update castResult and castResultBinary
         for (unsigned int ind_elev = 0; ind_elev < N_elev; ind_elev++) {
 
             for (unsigned int ind_azim = 0; ind_azim < N_azim; ind_azim++) {
                 point3d light_end; //endpoint of ray
-                point3d light_dir(float (tracking_distance *cos(elev_set[ind_elev])*cos(azim_set[ind_azim])),
-                                  float(tracking_distance * cos(elev_set[ind_elev]) * sin(azim_set[ind_azim])),
+                point3d light_dir(float (tracking_distance *cos(elev_set[ind_elev])*cos(azim_set[ind_azim]+azim_cur-PI)),
+                                  float(tracking_distance * cos(elev_set[ind_elev]) * sin(azim_set[ind_azim]+azim_cur-PI)),
                                   float(tracking_distance * sin(elev_set[ind_elev])));
 
 
@@ -266,7 +271,7 @@ void WaypointProposer::castRay(geometry_msgs::Point rayStartPnt,bool verbose
 
         double raycut_distance=kernel_mean(castResult,elev_kernel_size,azim_kernel_size,elev_idx,azim_idx);
 
-        param_.d_track=raycut_distance;
+//        param_.d_track=raycut_distance;
         std::cout<<"desired distance: "<<param_.d_track<<std::endl;
 
         // print the cast result
@@ -327,8 +332,8 @@ void  WaypointProposer::viewProposal(){
 
     double azim_cur=atan2(-param_.target_position[1]+param_.tracker_position[1],
                           -param_.target_position[0]+param_.tracker_position[0]);
-    if (azim_cur<0)
-        azim_cur+=2*Pi;
+//    if (azim_cur<0)
+//        azim_cur+=2*Pi;
 
     double r_cur=(param_.target_position-param_.tracker_position).norm();
 
@@ -338,12 +343,12 @@ void  WaypointProposer::viewProposal(){
     /**
  *  perform fitting for visibility cost  !!
  */
-    optimizer.poly_surf_fit(azim_cur);
-    param_.optimizer=this->optimizer;
+//    optimizer.poly_surf_fit(azim_cur);
+//    param_.optimizer=this->optimizer;
 
 
-
-
+    // Signed distance transform
+    optimizer.SEDT(0);
 
 
     // b spline surface fitting for constraint
@@ -355,9 +360,9 @@ void  WaypointProposer::viewProposal(){
 //    std::cout<<xy_mesh.azim_mesh_mat<<std::endl;
 //    std::cout<<xy_mesh.elev_mesh_mat<<std::endl;
 //
-
-    MatrixXd castResultReshaped=optimizer.periodic_reshape(
-            castResult,azim_cur);
+//
+//    MatrixXd castResultReshaped=optimizer.periodic_reshape(
+//            castResult,azim_cur);
 
     MatrixXd SEDT=optimizer.SDF;
 
@@ -376,7 +381,7 @@ void  WaypointProposer::viewProposal(){
             X(0) = xy_mesh.azim_mesh_mat.coeff(i,j) + (azim_cur-Pi)  ;
             X(1) = xy_mesh.elev_mesh_mat.coeff(i,j);
 
-            y = castResultReshaped.coeff(i,j);
+            y = castResult.coeff(i,j);
             y_Qv=-SEDT.coeff(i,j);
 
             // Store sample
@@ -476,37 +481,45 @@ void  WaypointProposer::viewProposal(){
 //
     int result = opt.optimize(x, minf);
 
+
+
+
+
     printf("found minimum at f(%g,%g,%g) = %0.10g\n", x[0], x[1], x[2], minf);
 
     min_x=x;
 
     // push the solution to filter
 
-    std::vector<double> update_sol;
-    update_sol.push_back(min_x[0]);
-    update_sol.push_back(min_x[1]);
-    update_sol.push_back(min_x[2]);
 
-    filter.buffer_insert(update_sol);
 
-    std::vector<double> filter_out=filter.filter_output();
+//    filter.buffer_insert(update_sol);
+//
+//    std::vector<double> filter_out=filter.filter_output();
 
     desired_pose.centerPnt=targetPose.position;
 
+//
+    desired_pose.ray_length=min_x[0];
+    desired_pose.azim=min_x[1];
+    desired_pose.elev=min_x[2];
 
-    desired_pose.ray_length=filter_out[0];
-//    min_x[1]=fmod(filter_out[1],2*Pi);
-//    if (filter_out[1]<0)
-//        filter_out[1]+=2*Pi;
-    desired_pose.azim=filter_out[1];
-    desired_pose.elev=filter_out[2];
 
+    std::vector<double> update_sol;
+    update_sol.push_back(desired_pose.getPoseFromViewVector().translation.x);
+    update_sol.push_back(desired_pose.getPoseFromViewVector().translation.y);
+    update_sol.push_back(desired_pose.getPoseFromViewVector().translation.z);
+
+
+    desired_pose.getPoseFromViewVector().translation.x;
+    desired_pose.getPoseFromViewVector().translation.y;
+    desired_pose.getPoseFromViewVector().translation.z;
 
     trajectory_msg.header.stamp = ros::Time::now();
     mav_msgs::msgMultiDofJointTrajectoryFromPositionYaw(
-            Eigen::Vector3d( desired_pose.getPoseFromViewVector().translation.x,
-                             desired_pose.getPoseFromViewVector().translation.y,
-                             desired_pose.getPoseFromViewVector().translation.z)
+            Eigen::Vector3d( ,
+                             ,
+                             )
             ,desired_pose.getYaw(), &trajectory_msg);
 
     // for visualization

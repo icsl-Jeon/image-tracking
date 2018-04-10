@@ -27,11 +27,11 @@ double obj_fun(unsigned n, const double *x, double *grad, void *param_info)
 
 
     double r=x[0],azim=x[1], elev=x[2];
-    printf("------------------------------- \n");
+//    printf("------------------------------- \n");
     // modular operator
-    azim=fmod(azim,2*Pi);
-    if (azim<0)
-        azim+=2*Pi;
+//    azim=fmod(azim,2*Pi);
+//    if (azim<0)
+//        azim+=2*Pi;
 
     Eigen::Vector3d view_vector;
     view_vector<<r*cos(elev)*cos(azim), r*cos(elev)*sin(azim) , r*sin(elev);
@@ -69,20 +69,20 @@ double obj_fun(unsigned n, const double *x, double *grad, void *param_info)
     // if SEDT and fitting was over in Optimizer class ...
 
 
-    double visibility_cost=w_v*(p->optimizer.poly_coeff*p->optimizer.get_X_derivative(azim,elev,0," "))(0);
+  //  double visibility_cost=w_v*(p->optimizer.poly_coeff*p->optimizer.get_X_derivative(azim,elev,0," "))(0);
     Vector2d X(azim,elev);
-//    double visibility_cost=w_v*(p->bspline->eval(X));
+   double visibility_cost=w_v*(p->bspline->eval(X));
 
     if (grad){
-        grad[1]+=w_v*(p->optimizer.poly_coeff*p->optimizer.get_X_derivative(azim,elev,1,"azim"))(0);
-       // grad[1]+=w_v*(p->bspline->evalJacobian(X))(0);
-        grad[2]+=w_v*(p->optimizer.poly_coeff*p->optimizer.get_X_derivative(azim,elev,1,"elev"))(0);
-       // grad[2]+=w_v*(p->bspline->evalJacobian(X))(1);
+        //grad[1]+=w_v*(p->optimizer.poly_coeff*p->optimizer.get_X_derivative(azim,elev,1,"azim"))(0);
+        grad[1]+=w_v*(p->bspline->evalJacobian(X))(0);
+       // grad[2]+=w_v*(p->optimizer.poly_coeff*p->optimizer.get_X_derivative(azim,elev,1,"elev"))(0);
+        grad[2]+=w_v*(p->bspline->evalJacobian(X))(1);
 
-        printf("current r: %f azim %f elev %f ::: ",r,azim,elev);
-        //printf( "dQ_v : [%f,%f]  ",visibility_cost_gradient[0],visibility_cost_gradient[1]);
-
-        printf("Q_t: %f Q_d:%f  Q_v: %f\n",translational_cost,tracking_distance_cost,visibility_cost);
+//        printf("current r: %f azim %f elev %f ::: ",r,azim,elev);
+//        //printf( "dQ_v : [%f,%f]  ",visibility_cost_gradient[0],visibility_cost_gradient[1]);
+//
+//        printf("Q_t: %f Q_d:%f  Q_v: %f\n",translational_cost,tracking_distance_cost,visibility_cost);
 
     }
 
@@ -193,10 +193,17 @@ void Optimizer::castRayResultUpdate(MatrixXd & castresult) {
 void Optimizer::SEDT(double query_azim)
 {
     //firstly, reshape considering periodicity centering query_azim
-    MatrixXd castRayResultBinaryReshaped=periodic_reshape(castRayResultBinary,query_azim);
-    std::cout<<"reshaped castRayResult:"<<std::endl;
-    std::cout<<castRayResultBinaryReshaped<<std::endl;
-    Mat bw_cast(N_azim,N_elev,CV_64F,castRayResultBinaryReshaped.data());
+
+
+//    MatrixXd castRayResultBinaryReshaped=periodic_reshape(castRayResultBinary,query_azim);
+//    std::cout<<"reshaped castRayResult:"<<std::endl;
+//    std::cout<<castRayResultBinaryReshaped<<std::endl;
+//    Mat bw_cast(N_azim,N_elev,CV_64F,castRayResultBinaryReshaped.data());
+//
+
+
+
+    Mat bw_cast(N_azim,N_elev,CV_64F,castRayResultBinary.data());
     bw_cast.convertTo(bw_cast,CV_8UC(1));
     transpose(bw_cast,bw_cast);
 
@@ -221,7 +228,6 @@ void Optimizer::SEDT(double query_azim)
     SDF=SDF.unaryExpr(std::ptr_fun( clamping));
 
     //clamping SEDT value for better optimization
-
 
 
     std::cout<<"SEDT"<<std::endl;
