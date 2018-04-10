@@ -36,7 +36,7 @@ double kernel_mean(MatrixXd input_mat,int mask_size_row,int mask_size_col,int ma
 WaypointProposer::WaypointProposer(float elev_min,float elev_max,unsigned int N_azim,unsigned int N_elev,float track_d,
                                    octomap::point3d min_point,octomap::point3d max_point,ros::NodeHandle private_nh,Optimizer optimizer)
 {
-    this->filter=Filter(3,20);
+    this->filter=Filter(3,10);
     this->octree_obj=new OcTree(0.1); //fake initialization
     this->tracking_distance=track_d; //desired tracking distance
     this->elev_min=elev_min;
@@ -198,6 +198,26 @@ void WaypointProposer::OctreeCallback(const octomap_msgs::Octomap& msg){
     AbstractOcTree* octree=octomap_msgs::fullMsgToMap(msg);
     //octree updater
     this->octree_obj=(dynamic_cast<OcTree*>(octree));
+
+
+
+    // free node around target
+    point3d light_start(targetPose.position.x,targetPose.position.y,targetPose.position.z);
+
+
+
+    double thresMin = octree_obj->getClampingThresMin();
+
+
+    for (OcTree::leaf_bbx_iterator it = octree_obj->begin_leafs_bbx(freebox_min_point + light_start,
+                                                                    freebox_max_point + light_start),
+                 end = octree_obj->end_leafs_bbx(); it != end; ++it)
+        it->setLogOdds(octomap::logodds(thresMin));
+
+    octree_obj->updateInnerOccupancy();
+
+
+
 }
 
 
@@ -215,9 +235,11 @@ void WaypointProposer::castRay(geometry_msgs::Point rayStartPnt,bool verbose
 
         bool ignoreUnknownCells = true;
 
+
         point3d light_start(float(rayStartPnt.x),float(rayStartPnt.y),float(rayStartPnt.z));
        //free octomap around target
 
+        /**
         double thresMin = octree_obj->getClampingThresMin();
 
 
@@ -227,6 +249,9 @@ void WaypointProposer::castRay(geometry_msgs::Point rayStartPnt,bool verbose
             it->setLogOdds(octomap::logodds(thresMin));
 
         octree_obj->updateInnerOccupancy();
+        **/
+
+
 
         // generate mesh
 

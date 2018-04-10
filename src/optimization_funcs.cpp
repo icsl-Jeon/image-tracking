@@ -5,11 +5,10 @@
 #include <optimization_funs.h>
 #include "optimization_funs.h"
 
-double clamping(double x)
-{
-    if(x>=4.5)
-        return 4.5;
-}
+//double clamping(double x)
+//{
+//   return x
+//}
 
 
 
@@ -79,10 +78,10 @@ double obj_fun(unsigned n, const double *x, double *grad, void *param_info)
        // grad[2]+=w_v*(p->optimizer.poly_coeff*p->optimizer.get_X_derivative(azim,elev,1,"elev"))(0);
         grad[2]+=w_v*(p->bspline->evalJacobian(X))(1);
 
-//        printf("current r: %f azim %f elev %f ::: ",r,azim,elev);
-//        //printf( "dQ_v : [%f,%f]  ",visibility_cost_gradient[0],visibility_cost_gradient[1]);
-//
-//        printf("Q_t: %f Q_d:%f  Q_v: %f\n",translational_cost,tracking_distance_cost,visibility_cost);
+        printf("current r: %f azim %f elev %f ::: ",r,azim,elev);
+        //printf( "dQ_v : [%f,%f]  ",visibility_cost_gradient[0],visibility_cost_gradient[1]);
+
+        printf("Q_t: %f Q_d:%f  Q_v: %f\n",translational_cost,tracking_distance_cost,visibility_cost);
 
     }
 
@@ -224,8 +223,10 @@ void Optimizer::SEDT(double query_azim)
     // to eigen
     cv2eigen(dist,SDF);
 
+    // scailing to max value ->4.5
 
-    SDF=SDF.unaryExpr(std::ptr_fun( clamping));
+    SDF*=4.5/SDF.maxCoeff();
+
 
     //clamping SEDT value for better optimization
 
