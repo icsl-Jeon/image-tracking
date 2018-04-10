@@ -150,6 +150,7 @@ public:
 
     //waypoint
     viewVector desired_pose;
+    Eigen::Vector3d viewpoint_proposal; // this is filtered vector
     trajectory_msgs::MultiDOFJointTrajectory trajectory_msg;
 
 
@@ -167,6 +168,7 @@ public:
     //Marker
     visualization_msgs::Marker castedLightMarker; // for query, we draw multiple rays
     visualization_msgs::Marker waypointMarker; // proposadddl waypoint ray from optimization
+    visualization_msgs::Marker waypointMarker_filtered; // proposadddl waypoint ray from optimization
 
 
     //target 3 dim scale : we need to free octomap around the target

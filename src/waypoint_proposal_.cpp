@@ -113,8 +113,21 @@ WaypointProposer::WaypointProposer(float elev_min,float elev_max,unsigned int N_
     waypointMarker.id = 0;
     waypointMarker.type = visualization_msgs::Marker::LINE_LIST;
     waypointMarker.scale.x = 0.05;
-    waypointMarker.color.r = 1;
+    waypointMarker.color.g = 1;
     waypointMarker.color.a = 0.5;
+
+
+    //casted lights for query
+    waypointMarker_filtered.header.frame_id = "world";
+    waypointMarker_filtered.header.stamp  = ros::Time::now();
+    waypointMarker_filtered.ns = "proposed_waypoint_filterd";
+    waypointMarker_filtered.action = visualization_msgs::Marker::ADD;
+    waypointMarker_filtered.pose.orientation.w = 1.0;
+    waypointMarker_filtered.id = 0;
+    waypointMarker_filtered.type = visualization_msgs::Marker::LINE_LIST;
+    waypointMarker_filtered.scale.x = 0.05;
+    waypointMarker_filtered.color.r = 1;
+    waypointMarker_filtered.color.a = 0.5;
 
 
 
@@ -200,10 +213,8 @@ void WaypointProposer::OctreeCallback(const octomap_msgs::Octomap& msg){
     this->octree_obj=(dynamic_cast<OcTree*>(octree));
 
 
-
     // free node around target
     point3d light_start(targetPose.position.x,targetPose.position.y,targetPose.position.z);
-
 
 
     double thresMin = octree_obj->getClampingThresMin();
@@ -237,25 +248,9 @@ void WaypointProposer::castRay(geometry_msgs::Point rayStartPnt,bool verbose
 
 
         point3d light_start(float(rayStartPnt.x),float(rayStartPnt.y),float(rayStartPnt.z));
-       //free octomap around target
-
-        /**
-        double thresMin = octree_obj->getClampingThresMin();
-
-
-        for (OcTree::leaf_bbx_iterator it = octree_obj->begin_leafs_bbx(freebox_min_point + light_start,
-                                                                        freebox_max_point + light_start),
-                     end = octree_obj->end_leafs_bbx(); it != end; ++it)
-            it->setLogOdds(octomap::logodds(thresMin));
-
-        octree_obj->updateInnerOccupancy();
-        **/
-
 
 
         // generate mesh
-
-
 
         // ray casting & update castResult and castResultBinary
         for (unsigned int ind_elev = 0; ind_elev < N_elev; ind_elev++) {
@@ -284,19 +279,6 @@ void WaypointProposer::castRay(geometry_msgs::Point rayStartPnt,bool verbose
 
 
 
-        // desired distance
-        double D_azim=2*PI/N_azim;
-        double D_elev=(elev_max-elev_min)/N_elev;
-
-        int azim_idx=floor(azim_cur/D_azim);
-        int elev_idx=floor((elev_cur-elev_min)/D_elev);
-
-        int azim_kernel_size=1;
-        int elev_kernel_size=1;
-
-        double raycut_distance=kernel_mean(castResult,elev_kernel_size,azim_kernel_size,elev_idx,azim_idx);
-
-//        param_.d_track=raycut_distance;
         std::cout<<"desired distance: "<<param_.d_track<<std::endl;
 
         // print the cast result
@@ -430,7 +412,6 @@ void  WaypointProposer::viewProposal(){
     printf("initial r: %f azim %f elev %f\n",r_cur,azim_cur,elev_cur);
 
 
-
     // initial value setting
     std::vector<double> x;
     x.push_back(r_cur);
@@ -470,40 +451,7 @@ void  WaypointProposer::viewProposal(){
     auto begin = std::chrono::high_resolution_clock::now();
     double minf;
 
-    Eigen::Vector3d rand_scale(0.1,Pi/16,Pi/10);
 
-//    int count=0;
-//    while(count<10) {
-//        count++;
-//        //perturb little bit
-//        for (int i=0;i<3;i++) {
-//            x[i] = cur_x[i]+(-rand_scale[i] + static_cast <double> (std::rand()) /( static_cast <double> (RAND_MAX/(2*rand_scale[i]))));
-//            if(x[i]<lb[i])
-//                x[i]=lb[i]+1e-4;
-//            if(x[i]>ub[i])
-//                x[i]=ub[i]-1e-4;
-//        }
-//
-//
-//        int result = opt.optimize(x, minf);
-//
-//        if(min_cost>minf)
-//        {
-//            min_cost=minf;
-//            min_x=x;
-//        }
-//
-//        ROS_INFO("optimization completed");
-//
-//        if (result < 0) {
-//            printf("nlopt failed! reason:%d", result);
-//        } else {
-//            auto end = std::chrono::high_resolution_clock::now();
-//            std::chrono::duration<double> elapsed = (end - begin);
-//            printf("found minimum at f(%g,%g,%g) = %0.10g\n", x[0], x[1], x[2], minf);
-//        }
-//    }
-//
     int result = opt.optimize(x, minf);
 
 
@@ -514,19 +462,14 @@ void  WaypointProposer::viewProposal(){
 
     min_x=x;
 
-    // push the solution to filter
 
-
-
-//    f
-//
-//
     desired_pose.centerPnt=targetPose.position;
 
-//
     desired_pose.ray_length=min_x[0];
     desired_pose.azim=min_x[1];
     desired_pose.elev=min_x[2];
+
+
 
 
     std::vector<double> update_sol;
@@ -537,22 +480,37 @@ void  WaypointProposer::viewProposal(){
 
     std::vector<double> filter_out=filter.filter_output();
 
+
     double desired_yaw=atan2(filter_out[1]-targetPose.position.y,filter_out[0]-targetPose.position.x)+PI;
+
+    viewpoint_proposal[0]=filter_out[0];
+    viewpoint_proposal[1]=filter_out[1];
+    viewpoint_proposal[2]=filter_out[2];
 
 
     trajectory_msg.header.stamp = ros::Time::now();
-    mav_msgs::msgMultiDofJointTrajectoryFromPositionYaw(
-            Eigen::Vector3d(filter_out[0] ,
-                            filter_out[1] ,
-                            filter_out[2] )
-            ,desired_yaw, &trajectory_msg);
+    mav_msgs::msgMultiDofJointTrajectoryFromPositionYaw(viewpoint_proposal,desired_yaw, &trajectory_msg);
 
     // for visualization
 
     waypointMarker.points.clear();
     waypointMarker.points.push_back(desired_pose.centerPnt);
-    waypointMarker.points.push_back(desired_pose.getEndPnt());
+    waypointMarker.points.push_back(desired_pose.getEndPnt()); //unfiltered
+
+    waypointMarker_filtered.points.clear();
+    waypointMarker_filtered.points.push_back(desired_pose.centerPnt);
+
+    geometry_msgs::Point waypoint;
+    waypoint.x=viewpoint_proposal[0];
+    waypoint.y=viewpoint_proposal[1];
+    waypoint.z=viewpoint_proposal[2];
+
+    waypointMarker_filtered.points.push_back(waypoint); //unfiltered
+
+
+
     waypointMarker.header.stamp=ros::Time::now();
+    waypointMarker_filtered.header.stamp=ros::Time::now();
 
 }
 
@@ -561,6 +519,8 @@ void WaypointProposer::marker_publish(){
     // waypoint visualization
     if (waypointMarker.points.size())
         marker_pub.publish(waypointMarker);
+    if (waypointMarker_filtered.points.size())
+        marker_pub.publish(waypointMarker_filtered);
 
     this->boundingCube_pub.publish(this->BBMarker);
 
