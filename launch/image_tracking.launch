@@ -23,9 +23,10 @@
   <include file="$(find octomap_server)/launch/octomap_tracking_server.launch">
     <arg name="world_name" value="world" />
     <arg name="mav_name" value="$(arg mav_name)"/>
-    <arg name="resolution" value="0.15"/>
+    <arg name="resolution" value="0.2"/>
     <arg name="max_range" value="10.0"/>
-    <arg name="height_map" value="true"/>	
+    <arg name="height_map" value="false"/>
+	<arg name="color_g" value="0.8"/>
  <!--   
 	<arg name="sensor_miss" value="0.1"/>
     <arg name="sensor_hit" value="0.9"/>
@@ -94,17 +95,17 @@
 	<!-- waypoint proposal -->
   <group ns="waypoint_proposal">
 	<node name="proposer" pkg="image_tracking" type="waypoint_proposal_from_octomap_node" output="screen">
-	<param name="track_d" type="double" value="5.0"/>
+	<param name="track_d" type="double" value="4.0"/>
 	<param name="elev_min" type="double" value="$(eval 3.141592/8.0)"/>
 	<param name="elev_max" type="double" value="$(eval 3.141592/4.0)"/>
-	<param name="N_azim" type="int" value="20"/>
-	<param name="N_elev" type="int" value="12"/>
-	<param name="xy_length_target" type="double" value="1"/>
+	<param name="N_azim" type="int" value="16"/>
+	<param name="N_elev" type="int" value="10"/>
+	<param name="xy_length_target" type="double" value="1.4"/>
 	<param name="z_min_target" type="double" value="-0.5"/>
 	<param name="z_max_target" type="double" value="0.8"/>
 	<param name="target_name" type="string" value="target"/>
 	<param name="tracker_name" type="string" value="$(arg mav_name)"/>
-	<param name="w_v" type="double" value="2"/> <!--visibility cost weight-->
+	<param name="w_v" type="double" value="3"/> <!--visibility cost weight-->
 	<param name="w_d" type="double" value="0.6"/> <!--tracking_distance cost weight-->
 	</node>
   </group>

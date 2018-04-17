@@ -444,7 +444,7 @@ void  WaypointProposer::viewProposal(){
 
 //    opt.set_initial_step(step_sizes);
     opt.set_min_objective(obj_fun,&param_);
-    opt.add_inequality_constraint(constraint,&param_);
+//    opt.add_inequality_constraint(constraint,&param_);
     opt.set_upper_bounds(ub);
     opt.set_lower_bounds(lb);
     opt.set_xtol_rel(1e-2);
@@ -453,10 +453,6 @@ void  WaypointProposer::viewProposal(){
 
 
     int result = opt.optimize(x, minf);
-
-
-
-
 
     printf("found minimum at f(%g,%g,%g) = %0.10g\n", x[0], x[1], x[2], minf);
 
